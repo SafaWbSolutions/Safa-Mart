@@ -1,0 +1,400 @@
+<?php
+/**
+ * Product page metadata extraction (OpenGraph, Twitter cards, JSON-LD).
+ */
+
+function ensure_utf8(string $html, string $contentType = ''): string
+{
+    $charset = '';
+    if (preg_match('/charset\s*=\s*["\']?([a-zA-Z0-9._-]+)/i', $contentType, $match)) {
+        $charset = $match[1];
+    } elseif (preg_match('/<meta[^>]+charset\s*=\s*["\']?([a-zA-Z0-9._-]+)/i', $html, $match)) {
+        $charset = $match[1];
+    }
+
+    if ($charset === '' || strcasecmp($charset, 'UTF-8') === 0) {
+        return $html;
+    }
+    if (function_exists('mb_convert_encoding')) {
+        $converted = @mb_convert_encoding($html, 'UTF-8', $charset);
+        return $converted === false ? $html : $converted;
+    }
+    if (function_exists('iconv')) {
+        $converted = @iconv($charset, 'UTF-8//IGNORE', $html);
+        return $converted === false ? $html : $converted;
+    }
+    return $html;
+}
+
+/** @return array<string,mixed> */
+function parse_meta_tags(string $html): array
+{
+    $meta = ['__all' => []];
+    if (!preg_match_all('/<meta\b[^>]*>/i', $html, $tags)) {
+        return $meta;
+    }
+
+    $attributePattern = '/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+))/s';
+    foreach ($tags[0] as $tag) {
+        $attributes = [];
+        if (!preg_match_all($attributePattern, $tag, $matches, PREG_SET_ORDER)) {
+            continue;
+        }
+        foreach ($matches as $match) {
+            $value = '';
+            if (isset($match[2]) && $match[2] !== '') {
+                $value = $match[2];
+            } elseif (isset($match[3]) && $match[3] !== '') {
+                $value = $match[3];
+            } elseif (isset($match[4])) {
+                $value = $match[4];
+            }
+            $attributes[strtolower($match[1])] = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        $key = $attributes['property'] ?? ($attributes['name'] ?? ($attributes['itemprop'] ?? ''));
+        if ($key === '' || !array_key_exists('content', $attributes)) {
+            continue;
+        }
+        $key = strtolower(trim($key));
+        $value = trim($attributes['content']);
+        if ($key === '') {
+            continue;
+        }
+        if (!isset($meta[$key])) {
+            $meta[$key] = $value;
+        }
+        $meta['__all'][] = ['key' => $key, 'value' => $value];
+    }
+    return $meta;
+}
+
+/** @param array<string,mixed> $meta */
+function meta_first(array $meta, array $keys): string
+{
+    foreach ($keys as $key) {
+        if (isset($meta[$key]) && is_string($meta[$key]) && trim($meta[$key]) !== '') {
+            return trim($meta[$key]);
+        }
+    }
+    return '';
+}
+
+/**
+ * @param mixed $node
+ * @param list<array<string,mixed>> $products
+ */
+function walk_json_ld($node, array &$products, int $depth = 0): void
+{
+    if ($depth > 12 || !is_array($node)) {
+        return;
+    }
+    if (isset($node['@type'])) {
+        $types = is_array($node['@type']) ? $node['@type'] : [$node['@type']];
+        foreach ($types as $type) {
+            if (is_string($type) && strcasecmp($type, 'Product') === 0) {
+                $products[] = $node;
+                break;
+            }
+        }
+    }
+    foreach ($node as $value) {
+        if (is_array($value)) {
+            walk_json_ld($value, $products, $depth + 1);
+        }
+    }
+}
+
+/** @return list<array<string,mixed>> */
+function collect_json_ld_products(string $html): array
+{
+    $products = [];
+    $pattern = '#<script\b[^>]*type\s*=\s*["\']application/ld\+json["\'][^>]*>(.*?)</script>#is';
+    if (!preg_match_all($pattern, $html, $matches)) {
+        return [];
+    }
+    foreach ($matches[1] as $raw) {
+        $raw = trim($raw);
+        $raw = preg_replace('/^\s*<!--|-->\s*$/s', '', $raw) ?? $raw;
+        if ($raw === '') {
+            continue;
+        }
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            walk_json_ld($decoded, $products);
+        }
+    }
+    return $products;
+}
+
+/** @param array<string,mixed> $product */
+function json_ld_offer(array $product): array
+{
+    $offers = $product['offers'] ?? [];
+    if (is_array($offers) && (isset($offers['price']) || isset($offers['lowPrice']) || isset($offers['@type']))) {
+        $offers = [$offers];
+    }
+    if (!is_array($offers)) {
+        return [];
+    }
+
+    $best = [];
+    $bestPrice = null;
+    foreach ($offers as $offer) {
+        if (!is_array($offer)) {
+            continue;
+        }
+        $price = normalize_price($offer['price'] ?? ($offer['lowPrice'] ?? 0));
+        if ($price > 0 && ($bestPrice === null || $price < $bestPrice)) {
+            $best = $offer;
+            $bestPrice = $price;
+        } elseif ($best === [] && (isset($offer['availability']) || isset($offer['priceCurrency']))) {
+            $best = $offer;
+        }
+    }
+    return $best;
+}
+
+/**
+ * @param array<string,mixed> $meta
+ * @param array<string,mixed> $jsonProduct
+ * @return list<string>
+ */
+function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): array
+{
+    $candidates = [];
+    $imageKeys = [
+        'og:image:secure_url', 'og:image:url', 'og:image',
+        'twitter:image', 'twitter:image:src', 'image',
+    ];
+    foreach ($meta['__all'] ?? [] as $entry) {
+        if (is_array($entry) && isset($entry['key'], $entry['value'])
+            && in_array($entry['key'], $imageKeys, true)
+            && trim((string) $entry['value']) !== '') {
+            $candidates[] = trim((string) $entry['value']);
+        }
+    }
+
+    if (isset($jsonProduct['image'])) {
+        $image = $jsonProduct['image'];
+        if (is_string($image)) {
+            $candidates[] = $image;
+        } elseif (is_array($image)) {
+            foreach ($image as $item) {
+                if (is_string($item)) {
+                    $candidates[] = $item;
+                } elseif (is_array($item)) {
+                    foreach (['url', 'contentUrl', 'thumbnailUrl'] as $key) {
+                        if (!empty($item[$key]) && is_string($item[$key])) {
+                            $candidates[] = $item[$key];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $urls = [];
+    foreach ($candidates as $candidate) {
+        $candidate = html_entity_decode(trim((string) $candidate), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($candidate === '') {
+            continue;
+        }
+        $resolved = resolve_url($baseUrl, $candidate);
+        if (!preg_match('#^https?://#i', $resolved)) {
+            continue;
+        }
+        if (!in_array($resolved, $urls, true)) {
+            $urls[] = $resolved;
+        }
+        if (count($urls) >= 8) {
+            break;
+        }
+    }
+    return $urls;
+}
+
+function extract_title_from_html(string $html, array $meta, array $jsonProduct): string
+{
+    $title = meta_first($meta, ['og:title', 'twitter:title', 'title']);
+    if ($title === '' && !empty($jsonProduct['name']) && is_string($jsonProduct['name'])) {
+        $title = $jsonProduct['name'];
+    }
+    if ($title === '' && preg_match('/<h1\b[^>]*>(.*?)<\/h1>/is', $html, $match)) {
+        $title = clean_text($match[1]);
+    }
+    if ($title === '' && preg_match('/<title\b[^>]*>(.*?)<\/title>/is', $html, $match)) {
+        $title = clean_text($match[1]);
+    }
+    $title = clean_text($title);
+    if (function_exists('mb_substr')) {
+        $title = mb_substr($title, 0, 300, 'UTF-8');
+    } else {
+        $title = substr($title, 0, 300);
+    }
+    return trim($title);
+}
+
+function extract_price_from_text(string $text): float
+{
+    if (preg_match('/(?:₹|Rs\.?|INR)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i', $text, $match)) {
+        return normalize_price($match[1]);
+    }
+    if (preg_match('/"(?:price|salePrice|sellingPrice|finalPrice)"\s*:\s*"?([0-9][0-9,]*(?:\.[0-9]{1,2})?)"/i', $text, $match)) {
+        return normalize_price($match[1]);
+    }
+    return 0.0;
+}
+
+function extract_mrp_from_text(string $text): float
+{
+    if (preg_match('/(?:M\.?\s*R\.?\s*P\.?|originalPrice|listPrice|strikePrice|markedPrice)[^0-9]{0,60}(?:₹|Rs\.?|INR)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i', $text, $match)) {
+        return normalize_price($match[1]);
+    }
+    return 0.0;
+}
+
+/**
+ * Scrape OpenGraph and JSON-LD product data.
+ *
+ * @return array<string,mixed>
+ */
+function scrape_product_metadata(string $url): array
+{
+    $response = http_request($url, [
+        'timeout'   => HTTP_TIMEOUT,
+        'max_bytes' => 4194304,
+        'accept'    => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    ]);
+
+    if (!$response['ok'] || $response['status'] < 200 || $response['status'] >= 400) {
+        throw new RuntimeException('Could not load the product page (HTTP ' . $response['status'] . ').');
+    }
+
+    $contentType = strtolower($response['content_type']);
+    if ($contentType !== '' && strpos($contentType, 'text/html') === false && strpos($contentType, 'application/xhtml') === false) {
+        throw new RuntimeException('The product URL did not return an HTML page.');
+    }
+
+    $html = ensure_utf8($response['body'], $contentType);
+    if (trim($html) === '') {
+        throw new RuntimeException('The product page was empty.');
+    }
+
+    $head = strtolower(substr($html, 0, 15000));
+    if (preg_match('/access denied|captcha|unusual traffic|robot check|verify you are (a )?human/i', $head)
+        && stripos($html, 'og:title') === false) {
+        throw new RuntimeException('The merchant blocked the request. Try again later.');
+    }
+
+    $meta = parse_meta_tags($html);
+    $jsonProducts = collect_json_ld_products($html);
+    $jsonProduct = $jsonProducts[0] ?? [];
+    $offer = json_ld_offer($jsonProduct);
+
+    $title = extract_title_from_html($html, $meta, $jsonProduct);
+    if ($title === '') {
+        throw new RuntimeException('Could not find a product title on the page.');
+    }
+
+    $description = meta_first($meta, ['og:description', 'twitter:description', 'description']);
+    if ($description === '' && !empty($jsonProduct['description']) && is_string($jsonProduct['description'])) {
+        $description = clean_text($jsonProduct['description']);
+    }
+
+    $currency = strtoupper(trim((string) ($offer['priceCurrency'] ?? '')));
+    $price = 0.0;
+    $priceCandidates = [
+        $offer['price'] ?? null,
+        $offer['lowPrice'] ?? null,
+        $meta['product:price:amount'] ?? null,
+        $meta['og:price:amount'] ?? null,
+        $meta['product:sale_price:amount'] ?? null,
+        $meta['twitter:data1'] ?? null,
+        $meta['price'] ?? null,
+    ];
+    foreach ($priceCandidates as $candidate) {
+        $candidatePrice = normalize_price($candidate);
+        if ($candidatePrice > 0) {
+            $price = $candidatePrice;
+            break;
+        }
+    }
+    if ($price <= 0) {
+        $price = extract_price_from_text($html);
+    }
+
+    if ($currency !== '' && $currency !== 'INR' && $price > 0) {
+        throw new RuntimeException('This product is not priced in Indian Rupees.');
+    }
+    $currency = 'INR';
+
+    $mrp = 0.0;
+    $mrpCandidates = [
+        $offer['highPrice'] ?? null,
+        $meta['product:original_price:amount'] ?? null,
+        $meta['og:price:standard_amount'] ?? null,
+        $meta['product:list_price:amount'] ?? null,
+        $meta['product:mrp:amount'] ?? null,
+    ];
+    foreach ($mrpCandidates as $candidate) {
+        $candidateMrp = normalize_price($candidate);
+        if ($candidateMrp > 0) {
+            $mrp = $candidateMrp;
+            break;
+        }
+    }
+    if ($mrp <= 0) {
+        $mrp = extract_mrp_from_text($html);
+    }
+    if ($mrp < $price) {
+        $mrp = $price;
+    }
+
+    $availabilityRaw = strtolower((string) ($offer['availability'] ?? ($meta['product:availability'] ?? '')));
+    $availability = 'unknown';
+    if (preg_match('/outofstock|soldout|discontinued|out of stock|sold out/i', $availabilityRaw)) {
+        $availability = 'out_of_stock';
+    } elseif (preg_match('/instock|limitedavailability|in stock/i', $availabilityRaw)) {
+        $availability = 'in_stock';
+    }
+
+    $brand = meta_first($meta, ['product:brand', 'og:brand']);
+    if ($brand === '' && isset($jsonProduct['brand'])) {
+        $brandData = $jsonProduct['brand'];
+        if (is_string($brandData)) {
+            $brand = $brandData;
+        } elseif (is_array($brandData) && !empty($brandData['name']) && is_string($brandData['name'])) {
+            $brand = $brandData['name'];
+        }
+    }
+
+    $categoryHint = meta_first($meta, ['product:category', 'article:section', 'category']);
+    if ($categoryHint === '' && !empty($jsonProduct['category']) && is_string($jsonProduct['category'])) {
+        $categoryHint = clean_text($jsonProduct['category']);
+    }
+
+    $images = collect_image_urls($meta, $jsonProduct, $response['effective_url'] ?? $url);
+    $canonical = meta_first($meta, ['og:url', 'twitter:url']);
+    if ($canonical !== '' && preg_match('#^https?://#i', $canonical)) {
+        $canonical = resolve_url($response['effective_url'] ?? $url, $canonical);
+    } else {
+        $canonical = $response['effective_url'] ?? $url;
+    }
+
+    return [
+        'title'          => $title,
+        'description'    => truncate_text($description, 1800),
+        'image'          => $images[0] ?? null,
+        'images'         => $images,
+        'price'          => $price,
+        'mrp'            => $mrp,
+        'currency'       => $currency,
+        'brand'          => clean_text($brand),
+        'category_hint'  => clean_text($categoryHint),
+        'availability'   => $availability,
+        'platform'       => detect_platform($response['effective_url'] ?? $url),
+        'canonical_url'  => $canonical,
+        'effective_url'  => $response['effective_url'] ?? $url,
+    ];
+}

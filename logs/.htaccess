@@ -1,0 +1,2 @@
+# Private application logs. Deny all direct web access.
+Require all denied

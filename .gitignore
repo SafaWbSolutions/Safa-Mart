@@ -1,0 +1,27 @@
+# Local configuration and secrets
+config.local.php
+.env
+.env.*
+
+# Logs
+logs/*
+!logs/.gitignore
+!logs/.htaccess
+automation/sync.log
+automation/sync.log.*
+
+# Uploaded product images are generated on the Hostinger server
+uploads/products/*
+!uploads/products/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

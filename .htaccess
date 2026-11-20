@@ -1,0 +1,38 @@
+# Safa Mart - Apache configuration for Hostinger shared hosting
+Options -Indexes
+DirectoryIndex index.php
+AddDefaultCharset UTF-8
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Never expose automation scripts, logs or repository metadata.
+    RewriteRule ^(automation|logs|\.github|\.git)(/|$) - [F,L,NC]
+</IfModule>
+
+# Block direct HTTP access to configuration and schema files.
+<FilesMatch "^(config\.php|config\.local\.php|database\.sql|README\.md|composer\.(json|lock)|\.gitignore)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 6 months"
+    ExpiresByType image/png "access plus 6 months"
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    # Telegram and the upload endpoint must never be cached by a proxy.
+    <FilesMatch "^(webhook|upload)\.php$">
+        Header always set Cache-Control "no-store, max-age=0"
+    </FilesMatch>
+</IfModule>

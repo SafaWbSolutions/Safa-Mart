@@ -1,0 +1,43 @@
+<?php
+require_once __DIR__ . '/config.php';
+security_headers();
+
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow');
+header('Referrer-Policy: no-referrer');
+
+$id = (int) ($_GET['id'] ?? 0);
+$fallback = site_url('index.php');
+if ($id < 1) {
+    header('Location: ' . $fallback, true, 302);
+    exit;
+}
+
+$product = find_product_by_id($id);
+if ($product === null) {
+    app_log('info', 'Affiliate redirect skipped: product not found', ['id' => $id]);
+    header('Location: ' . $fallback, true, 302);
+    exit;
+}
+
+$affiliateUrl = trim((string) ($product['affiliate_url'] ?? ''));
+$parts = parse_url($affiliateUrl);
+if (!$parts || empty($parts['scheme']) || empty($parts['host'])
+    || !in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)) {
+    app_log('error', 'Affiliate redirect skipped: invalid URL', ['id' => $id]);
+    header('Location: ' . $fallback, true, 302);
+    exit;
+}
+
+$clickResult = supabase_rpc('increment_product_click', ['product_id' => $id], false, 5);
+if (!$clickResult['ok']) {
+    app_log('warning', 'Click counter RPC failed', [
+        'id'     => $id,
+        'status' => $clickResult['status'],
+        'error'  => $clickResult['error'],
+    ]);
+}
+
+header('Location: ' . $affiliateUrl, true, 302);
+exit;

@@ -1,0 +1,243 @@
+<?php
+/**
+ * Telegram bot webhook: convert a merchant URL, scrape it, store the image as
+ * WebP and upsert the product into Supabase.
+ */
+
+require_once dirname(__DIR__) . '/config.php';
+security_headers();
+header('Content-Type: application/json; charset=utf-8');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    json_response(['ok' => false, 'error' => 'POST required'], 405);
+}
+
+$providedSecret = (string) ($_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '');
+if (TELEGRAM_WEBHOOK_SECRET === '' || $providedSecret === '' || !hash_equals(TELEGRAM_WEBHOOK_SECRET, $providedSecret)) {
+    json_response(['ok' => false, 'error' => 'Unauthorized'], 401);
+}
+
+$rawBody = file_get_contents('php://input');
+if ($rawBody === false || strlen($rawBody) > 1048576) {
+    json_response(['ok' => false, 'error' => 'Invalid payload'], 400);
+}
+$update = json_decode($rawBody, true);
+if (!is_array($update)) {
+    json_response(['ok' => false, 'error' => 'Invalid JSON'], 400);
+}
+
+$updateId = (string) ($update['update_id'] ?? '');
+if ($updateId !== '' && !claim_telegram_update($updateId)) {
+    json_response(['ok' => true, 'duplicate' => true]);
+}
+
+$message = $update['message'] ?? ($update['channel_post'] ?? null);
+if (!is_array($message)) {
+    json_response(['ok' => true, 'ignored' => 'no message']);
+}
+
+$chatId = $message['chat']['id'] ?? null;
+if ($chatId === null) {
+    json_response(['ok' => true, 'ignored' => 'no chat']);
+}
+$chatId = (string) $chatId;
+
+if (!telegram_chat_allowed($chatId)) {
+    app_log('warning', 'Telegram listing rejected: chat not allowlisted', ['chat_id' => $chatId]);
+    json_response(['ok' => true, 'ignored' => 'chat not allowed']);
+}
+
+$text = trim((string) ($message['text'] ?? ($message['caption'] ?? '')));
+if ($text === '') {
+    telegram_send_message($chatId, 'Send me a product link from Meesho, Flipkart, Myntra, Ajio or Amazon and I will add it to the store.');
+    json_response(['ok' => true, 'ignored' => 'empty message']);
+}
+
+$parts = preg_split('/\s+/', $text) ?: [];
+$command = strtolower(explode('@', (string) ($parts[0] ?? ''))[0]);
+if ($command === '/start' || $command === '/help') {
+    $welcome = '🛍️ <b>' . telegram_escape(APP_NAME) . ' listing bot</b>' . "\n\n"
+        . 'Send one or more product links (up to 2 per message). I will convert the affiliate link, download the image, optimise it to WebP and publish the product.' . "\n\n"
+        . "Supported: Meesho (kept as-is), Flipkart, Myntra, Ajio, Amazon and more.\n"
+        . "Commands: /id – show this chat ID\n"
+        . "Store: " . telegram_escape(site_url('index.php'));
+    telegram_send_message($chatId, $welcome);
+    json_response(['ok' => true, 'command' => $command]);
+}
+if ($command === '/id') {
+    $userId = (string) ($message['from']['id'] ?? 'unknown');
+    telegram_send_message($chatId, "Chat ID: <code>" . telegram_escape($chatId) . "</code>\nUser ID: <code>" . telegram_escape($userId) . '</code>');
+    json_response(['ok' => true, 'command' => '/id']);
+}
+if (str_starts_with($text, '/')) {
+    telegram_send_message($chatId, 'Unknown command. Send a product URL or use /help.');
+    json_response(['ok' => true, 'ignored' => 'unknown command']);
+}
+
+if (!rate_limit_hit('telegram-list:' . $chatId, 20, 900)) {
+    telegram_send_message($chatId, '⏳ Too many links in a short time. Please wait a few minutes and try again.');
+    json_response(['ok' => true, 'ignored' => 'rate limited']);
+}
+
+if (!supabase_is_configured(true)) {
+    telegram_send_message($chatId, '⚠️ The store database is not configured yet. Add SUPABASE_SERVICE_KEY on the server.');
+    json_response(['ok' => true, 'ignored' => 'supabase not configured']);
+}
+
+preg_match_all('~https?://[^\s<>"\']+~i', $text, $urlMatches);
+$urls = [];
+foreach ($urlMatches[0] as $url) {
+    $url = rtrim($url, ".,;:!?)]}'\"");
+    if ($url !== '' && !in_array($url, $urls, true)) {
+        $urls[] = $url;
+    }
+    if (count($urls) >= 2) {
+        break;
+    }
+}
+if (!$urls) {
+    telegram_send_message($chatId, 'Please include a product URL in the message. Example: https://www.meesho.com/...');
+    json_response(['ok' => true, 'ignored' => 'no urls']);
+}
+
+@set_time_limit(110);
+ignore_user_abort(true);
+
+telegram_send_message($chatId, '⏳ Processing ' . count($urls) . ' link' . (count($urls) === 1 ? '' : 's') . '…');
+
+$listed = 0;
+$failed = 0;
+$seen = [];
+
+foreach ($urls as $url) {
+    try {
+        if (!is_safe_remote_url($url)) {
+            throw new RuntimeException('That URL is invalid or not publicly reachable.');
+        }
+
+        $canonicalUrl = canonicalize_product_url($url);
+        if (isset($seen[$canonicalUrl])) {
+            throw new RuntimeException('This link was already included in the message.');
+        }
+        $seen[$canonicalUrl] = true;
+
+        $platform = detect_platform($canonicalUrl);
+        $affiliate = convert_to_affiliate($canonicalUrl, $platform);
+        $metadata = scrape_product_metadata($canonicalUrl);
+
+        if ($platform === 'Other' && ($metadata['platform'] ?? 'Other') !== 'Other') {
+            $platform = $metadata['platform'];
+        }
+        if (($metadata['availability'] ?? 'unknown') === 'out_of_stock') {
+            throw new RuntimeException('This product is out of stock on the merchant page.');
+        }
+
+        $price = (float) ($metadata['price'] ?? 0);
+        if ($price <= 0 && preg_match('/(?:₹|Rs\.?|INR)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i', $text, $priceMatch)) {
+            $price = normalize_price($priceMatch[1]);
+        }
+        $mrp = (float) ($metadata['mrp'] ?? 0);
+        if ($mrp < $price) {
+            $mrp = $price;
+        }
+        $metadataTitle = clean_text($metadata['title'] ?? '');
+        if ($metadataTitle === '') {
+            throw new RuntimeException('Could not find a product title.');
+        }
+
+        $images = is_array($metadata['images'] ?? null) ? $metadata['images'] : [];
+        if (!$images) {
+            throw new RuntimeException('No product image was found on the merchant page.');
+        }
+
+        $slug = build_slug($metadataTitle);
+        $primaryImage = download_image_as_webp($images[0], $slug, 10);
+        $gallery = [$primaryImage['url']];
+        foreach (array_slice($images, 1, 2) as $extraImage) {
+            try {
+                if (!is_safe_remote_url($extraImage)) {
+                    continue;
+                }
+                $saved = download_image_as_webp($extraImage, $slug, 6);
+                if (!in_array($saved['url'], $gallery, true)) {
+                    $gallery[] = $saved['url'];
+                }
+            } catch (Throwable $imageError) {
+                app_log('info', 'Extra gallery image skipped', ['error' => $imageError->getMessage()]);
+            }
+        }
+
+        $category = infer_category(
+            $metadataTitle . ' ' . ($metadata['description'] ?? '') . ' ' . ($metadata['brand'] ?? ''),
+            (string) ($metadata['category_hint'] ?? '')
+        );
+
+        $payload = [
+            'slug'             => $slug,
+            'title'            => truncate_text($metadataTitle, 300),
+            'description'      => truncate_text((string) ($metadata['description'] ?? ''), 1800),
+            'price'            => $price,
+            'mrp'              => $mrp > 0 ? $mrp : $price,
+            'discount_percent' => calculate_discount($mrp, $price),
+            'category'         => $category,
+            'source_platform'  => $platform,
+            'thumbnail_url'    => $primaryImage['url'],
+            'gallery_urls'     => $gallery,
+            'affiliate_url'    => $affiliate['url'],
+            'original_url'     => $canonicalUrl,
+            'is_active'        => true,
+            'last_checked_at'  => gmdate('c'),
+            'last_synced_at'   => gmdate('c'),
+        ];
+
+        $saved = supabase_upsert($payload, 'original_url');
+        if (!$saved['ok']) {
+            throw new RuntimeException('Could not save the product: ' . $saved['error']);
+        }
+
+        $listed++;
+        $priceLabel = $price > 0 ? '₹' . inr_plain($price) : 'Price on request';
+        $confirmation = '✅ <b>Listed:</b> ' . telegram_escape(truncate_text($metadataTitle, 120))
+            . ' - ' . telegram_escape($priceLabel) . "\n"
+            . '🏬 ' . telegram_escape($platform)
+            . ' · 🏷️ ' . telegram_escape($category) . "\n"
+            . '🔗 ' . telegram_escape(site_url('product.php?slug=' . rawurlencode($slug)));
+        if (!$affiliate['converted'] && !empty($affiliate['error']) && $platform !== 'Meesho') {
+            $confirmation .= "\n⚠️ " . telegram_escape($affiliate['error']);
+        }
+        telegram_send_message($chatId, $confirmation);
+    } catch (Throwable $error) {
+        $failed++;
+        app_log('error', 'Telegram product listing failed', [
+            'url'   => $url,
+            'error' => $error->getMessage(),
+        ]);
+        telegram_send_message(
+            $chatId,
+            '❌ <b>Could not list this link</b>' . "\n"
+            . telegram_escape($error->getMessage()) . "\n"
+            . telegram_escape($url)
+        );
+    }
+}
+
+if (count($urls) > 1) {
+    telegram_send_message($chatId, '📊 Finished: ' . $listed . ' listed, ' . $failed . ' failed.');
+}
+
+json_response(['ok' => true, 'listed' => $listed, 'failed' => $failed]);
+
+function telegram_chat_allowed(string $chatId): bool
+{
+    $allowed = trim(TELEGRAM_ALLOWED_CHAT_IDS);
+    if ($allowed === '') {
+        return true;
+    }
+    foreach (preg_split('/[\s,;]+/', $allowed) ?: [] as $candidate) {
+        $candidate = trim($candidate);
+        if ($candidate !== '' && hash_equals($candidate, $chatId)) {
+            return true;
+        }
+    }
+    return false;
+}
