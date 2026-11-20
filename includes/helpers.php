@@ -602,7 +602,7 @@ function render_product_card(array $product): string
         : '';
     $priceHtml = $price > 0 ? e(inr($price)) : 'Price on request';
 
-    return '<article class="product-card" data-product-id="' . $id . '">'
+    return '<article class="product-card reveal" data-product-id="' . $id . '">'
         . '<a class="product-media" href="' . e($productUrl) . '" aria-label="' . e($title) . '">'
         . $media
         . $discountHtml

@@ -122,7 +122,7 @@ if (SUPABASE_URL !== '') {
             <span class="brand-text">Safa<span>Mart</span></span>
         </a>
 
-        <form class="search-form" id="searchForm" action="index.php" method="get" role="search">
+        <form class="search-form reveal" id="searchForm" action="index.php" method="get" role="search">
             <svg class="search-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>
             </svg>
@@ -137,22 +137,22 @@ if (SUPABASE_URL !== '') {
                 aria-label="Search products"
                 maxlength="60"
             >
-            <button type="submit" class="search-submit">Search</button>
+            <button type="submit" class="search-submit reveal">Search</button>
         </form>
 
-        <div class="header-badge" aria-hidden="true">
+        <div class="header-badge reveal" aria-hidden="true">
             <span class="header-badge-dot"></span>
             <span>Live deals</span>
         </div>
     </div>
 
     <div class="site-container platform-strip" aria-label="Filter by store">
-        <a class="platform-pill <?= $platform === '' ? 'is-active' : '' ?>"
+        <a class="platform-pill reveal <?= $platform === '' ? 'is-active' : '' ?>"
            href="<?= e($buildUrl(['platform' => ''])) ?>" data-platform="">
             <span class="platform-dot platform-dot-all"></span> All
         </a>
         <?php foreach (PLATFORM_FILTERS as $store): ?>
-            <a class="platform-pill platform-pill-<?= e(strtolower($store)) ?> <?= $platform === $store ? 'is-active' : '' ?>"
+            <a class="platform-pill platform-pill-<?= e(strtolower($store)) ?> reveal <?= $platform === $store ? 'is-active' : '' ?>"
                href="<?= e($buildUrl(['platform' => $store])) ?>" data-platform="<?= e($store) ?>">
                 <span class="platform-dot platform-dot-<?= e(strtolower($store)) ?>"></span> <?= e($store) ?>
             </a>
@@ -162,17 +162,17 @@ if (SUPABASE_URL !== '') {
 
 <main class="site-container storefront-main">
     <nav class="category-strip" aria-label="Shop by category">
-        <a class="category-chip <?= $category === '' ? 'is-active' : '' ?>"
+        <a class="category-chip reveal <?= $category === '' ? 'is-active' : '' ?>"
            href="<?= e($buildUrl(['category' => ''])) ?>" data-category="">All deals</a>
         <?php foreach (PRODUCT_CATEGORIES as $cat): ?>
-            <a class="category-chip <?= $category === $cat ? 'is-active' : '' ?>"
+            <a class="category-chip <?= $category === $cat ? 'is-active' : '' ?> reveal"
                href="<?= e($buildUrl(['category' => $cat])) ?>" data-category="<?= e($cat) ?>"><?= e($cat) ?></a>
         <?php endforeach; ?>
     </nav>
 
     <?php if (!$hasFilters): ?>
-        <section class="hero-banner" aria-label="Safa Mart highlights">
-            <div class="hero-copy">
+        <section class="hero-banner reveal" aria-label="Safa Mart highlights" data-parallax-speed="0.2">
+            <div class="hero-copy reveal">
                 <span class="hero-eyebrow"><span class="live-dot"></span> Trending on Safa Mart</span>
                 <h1>Big savings.<br><span>Zero guesswork.</span></h1>
                 <p>Handpicked products from your favourite stores — at prices worth talking about.</p>
@@ -181,7 +181,7 @@ if (SUPABASE_URL !== '') {
                     <span>✓ Fresh deals every 4 hours</span>
                 </div>
             </div>
-            <div class="hero-deal-card" aria-hidden="true">
+            <div class="hero-deal-card reveal" aria-hidden="true">
                 <span class="hero-deal-label">TODAY'S PICKS</span>
                 <strong>Up to 90% off</strong>
                 <span class="hero-deal-line"></span>
@@ -190,8 +190,8 @@ if (SUPABASE_URL !== '') {
         </section>
     <?php endif; ?>
 
-    <section class="products-section" aria-labelledby="dealsHeading">
-        <div class="section-heading">
+    <section class="products-section reveal" aria-labelledby="dealsHeading">
+        <div class="section-heading reveal">
             <div>
                 <h2 id="dealsHeading">
                     <?php
@@ -240,8 +240,8 @@ if (SUPABASE_URL !== '') {
             <button type="button" class="empty-action" data-clear-filters>Show all deals</button>
         </div>
 
-        <div class="load-more-wrap <?= $hasMore ? '' : 'is-hidden' ?>" id="loadMoreWrap">
-            <button type="button" class="load-more-btn" id="loadMoreBtn">
+        <div class="load-more-wrap reveal <?= $hasMore ? '' : 'is-hidden' ?>" id="loadMoreWrap">
+            <button type="button" class="load-more-btn reveal" id="loadMoreBtn">
                 <span class="load-more-label">Load more deals</span>
                 <span class="btn-spinner" aria-hidden="true"></span>
             </button>
@@ -251,8 +251,8 @@ if (SUPABASE_URL !== '') {
 </main>
 
 <footer class="site-footer">
-    <div class="site-container footer-grid">
-        <div class="footer-brand">
+    <div class="site-container footer-grid reveal">
+        <div class="footer-brand reveal">
             <a class="brand brand-footer" href="<?= e(site_url('index.php')) ?>">
                 <span class="brand-mark" aria-hidden="true">
                     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -263,28 +263,28 @@ if (SUPABASE_URL !== '') {
             </a>
             <p>Smart deals from India's favourite shopping destinations. We track prices so you don't have to.</p>
         </div>
-        <div class="footer-links">
+        <div class="footer-links reveal">
             <h3>Shop by category</h3>
             <?php foreach (PRODUCT_CATEGORIES as $cat): ?>
                 <a href="<?= e($buildUrl(['category' => $cat, 'platform' => ''])) ?>"><?= e($cat) ?></a>
             <?php endforeach; ?>
         </div>
-        <div class="footer-links">
+        <div class="footer-links reveal">
             <h3>Top stores</h3>
             <?php foreach (PLATFORM_FILTERS as $store): ?>
                 <a href="<?= e($buildUrl(['platform' => $store, 'category' => ''])) ?>"><?= e($store) ?> deals</a>
             <?php endforeach; ?>
         </div>
-        <div class="footer-disclosure">
+        <div class="footer-disclosure reveal">
             <h3>Affiliate disclosure</h3>
             <p>As an affiliate partner, <?= e(APP_NAME) ?> may earn a small commission when you buy through our links. The price you pay does not change.</p>
             <p class="footer-small">Prices and availability are set by the merchant and can change without notice. Always confirm on the merchant's page.</p>
         </div>
     </div>
-    <div class="site-container footer-bottom">
+    <div class="site-container footer-bottom reveal">
         <span>© <?= date('Y') ?> <?= e(APP_NAME) ?>. All rights reserved.</span>
         <span>Made for smart shoppers in India.</span>
-        <div class="made-by-credit">
+        <div class="made-by-credit reveal">
             <span class="made-by-label">Made By :</span>
             <span class="made-by-name">Safa Web Solutions</span>
             <span class="indian-flag" aria-label="Indian Flag" title="India">
