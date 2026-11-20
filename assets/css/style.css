@@ -951,66 +951,162 @@ button {
     color: #cbd2df;
 }
 
+/* ---------- Made-by credit badge ---------- */
 .made-by-credit {
-    display: flex;
+    position: relative;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    color: #8892a3;
+    gap: 10px;
+    padding: 6px 15px 6px 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .02));
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, .07) inset,
+        0 6px 18px rgba(0, 0, 0, .28);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
     white-space: nowrap;
+    transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
 }
 
-.made-by-label {
-    font-weight: 500;
-    color: #9aa3b2;
+/* Light sweep across the badge on hover */
+.made-by-credit::after {
+    content: '';
+    position: absolute;
+    top: -20%;
+    bottom: -20%;
+    left: -70%;
+    width: 45%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .18), transparent);
+    transform: skewX(-18deg);
+    transition: left .65s ease;
+    pointer-events: none;
 }
 
-.made-by-name {
-    font-weight: 700;
-    color: #ffd166;
-    letter-spacing: 0.2px;
+.made-by-credit:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 153, 51, .38);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, .1) inset,
+        0 10px 26px rgba(0, 0, 0, .34),
+        0 0 0 3px rgba(255, 153, 51, .07);
+}
+
+.made-by-credit:hover::after {
+    left: 135%;
 }
 
 .indian-flag {
     display: inline-flex;
     align-items: center;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    transition: transform 0.2s ease;
+    justify-content: center;
+    line-height: 0;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35));
+    transition: transform .25s ease;
 }
 
-.indian-flag:hover {
-    transform: scale(1.1);
+.indian-flag svg {
+    display: block;
+    border-radius: 3px;
+}
+
+.made-by-credit:hover .indian-flag {
+    transform: scale(1.07) rotate(-3deg);
+}
+
+.made-by-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    line-height: 1;
+}
+
+.made-by-label {
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #8b95a7;
+}
+
+.made-by-name {
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: .01em;
+    background: linear-gradient(180deg, #ffffff 0%, #d5dce8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: #eef2f8;
+}
+
+.credit-divider {
+    width: 1px;
+    height: 14px;
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, .24), transparent);
 }
 
 .made-in-india {
+    font-size: 11px;
     font-weight: 800;
-    font-size: 12px;
-    letter-spacing: 0.5px;
-    background: linear-gradient(135deg, #ff9933 0%, #ffcc00 25%, #ffffff 35%, #ffffff 65%, #138808 75%, #0a6b00 100%);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    background: linear-gradient(90deg,
+        #ff9933 0%,
+        #ffc46b 20%,
+        #ffffff 40%,
+        #f2f7f2 55%,
+        #7bd38a 74%,
+        #138808 100%);
+    background-size: 200% 100%;
     -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
     background-clip: text;
-    text-shadow: 
-        0 0 1px rgba(255,153,51,0.5),
-        1px 1px 2px rgba(0,0,0,0.3),
-        2px 2px 4px rgba(0,0,0,0.2),
-        3px 3px 6px rgba(0,0,0,0.15);
-    filter: drop-shadow(0 3px 6px rgba(255,153,51,0.3));
-    position: relative;
-    display: inline-block;
-    padding: 2px 0;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .45));
+    animation: credit-tricolour 7s linear infinite;
 }
 
-.made-in-india::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -2px;
-    height: 2px;
-    background: linear-gradient(90deg, #ff9933, #ffffff, #138808);
-    border-radius: 1px;
-    opacity: 0.6;
+@keyframes credit-tricolour {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+@media (max-width: 720px) {
+    .footer-bottom {
+        flex-wrap: wrap;
+        justify-content: center;
+        row-gap: 12px;
+        text-align: center;
+    }
+
+    .made-by-credit {
+        gap: 7px;
+        padding: 5px 10px 5px 6px;
+    }
+
+    .made-by-label {
+        display: none;
+    }
+
+    .made-by-name {
+        font-size: 11px;
+    }
+
+    .made-in-india {
+        font-size: 9.5px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .made-in-india {
+        animation: none;
+    }
+
+    .made-by-credit:hover {
+        transform: none;
+    }
 }
 
 /* ==========================================================================
@@ -1876,15 +1972,6 @@ button {
     right: 0;
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(233, 30, 99, .45), rgba(255, 111, 0, .35), transparent);
-}
-
-.made-in-india {
-    animation: credit-glow 4s ease-in-out infinite alternate;
-}
-
-@keyframes credit-glow {
-    0% { filter: drop-shadow(0 2px 5px rgba(255, 153, 51, .28)) brightness(1); }
-    100% { filter: drop-shadow(0 5px 10px rgba(255, 153, 51, .45)) brightness(1.08); }
 }
 
 /* Hero: subtle depth, no parallax transforms */

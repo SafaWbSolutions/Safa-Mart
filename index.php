@@ -285,16 +285,25 @@ if (SUPABASE_URL !== '') {
         <span>© <?= date('Y') ?> <?= e(APP_NAME) ?>. All rights reserved.</span>
         <span>Made for smart shoppers in India.</span>
         <div class="made-by-credit">
-            <span class="made-by-label">Made By :</span>
-            <span class="made-by-name">Safa Web Solutions</span>
-            <span class="indian-flag" aria-label="Indian Flag" title="India">
-                <svg viewBox="0 0 30 20" width="28" height="18" fill="none" aria-hidden="true">
-                    <rect x="0" y="0" width="30" height="6.66" fill="#FF9933"/>
-                    <rect x="0" y="6.66" width="30" height="6.68" fill="#FFFFFF"/>
-                    <circle cx="15" cy="10" r="3.3" stroke="#000080" stroke-width="0.8" fill="none"/>
-                    <rect x="0" y="13.34" width="30" height="6.66" fill="#138808"/>
+            <span class="indian-flag" role="img" aria-label="Indian flag" title="India">
+                <svg viewBox="0 0 30 20" width="26" height="18" aria-hidden="true" focusable="false">
+                    <defs>
+                        <clipPath id="creditFlagClip"><rect width="30" height="20" rx="3"/></clipPath>
+                    </defs>
+                    <g clip-path="url(#creditFlagClip)">
+                        <rect width="30" height="6.67" fill="#FF9933"/>
+                        <rect y="6.67" width="30" height="6.66" fill="#FFFFFF"/>
+                        <rect y="13.33" width="30" height="6.67" fill="#138808"/>
+                        <circle cx="15" cy="10" r="2.9" fill="none" stroke="#000080" stroke-width="0.9"/>
+                        <circle cx="15" cy="10" r="0.7" fill="#000080"/>
+                    </g>
                 </svg>
             </span>
+            <span class="made-by-text">
+                <span class="made-by-label">Made by</span>
+                <span class="made-by-name">Safa Web Solutions</span>
+            </span>
+            <span class="credit-divider" aria-hidden="true"></span>
             <span class="made-in-india">Made in India</span>
         </div>
     </div>
