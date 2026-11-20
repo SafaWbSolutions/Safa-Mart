@@ -284,6 +284,19 @@ if (SUPABASE_URL !== '') {
     <div class="site-container footer-bottom">
         <span>© <?= date('Y') ?> <?= e(APP_NAME) ?>. All rights reserved.</span>
         <span>Made for smart shoppers in India.</span>
+        <div class="made-by-credit">
+            <span class="made-by-label">Made By :</span>
+            <span class="made-by-name">Safa Web Solutions</span>
+            <span class="indian-flag" aria-label="Indian Flag" title="India">
+                <svg viewBox="0 0 30 20" width="28" height="18" fill="none" aria-hidden="true">
+                    <rect x="0" y="0" width="30" height="6.66" fill="#FF9933"/>
+                    <rect x="0" y="6.66" width="30" height="6.68" fill="#FFFFFF"/>
+                    <circle cx="15" cy="10" r="3.3" stroke="#000080" stroke-width="0.8" fill="none"/>
+                    <rect x="0" y="13.34" width="30" height="6.66" fill="#138808"/>
+                </svg>
+            </span>
+            <span class="made-in-india">Made in India</span>
+        </div>
     </div>
 </footer>
 
