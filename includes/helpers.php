@@ -292,8 +292,6 @@ function detect_platform(string $url): string
     }
 
     $map = [
-        'meesho.com'          => 'Meesho',
-        'msho.in'             => 'Meesho',
         'flipkart.com'        => 'Flipkart',
         'fkrt.it'             => 'Flipkart',
         'fkrt.co'             => 'Flipkart',

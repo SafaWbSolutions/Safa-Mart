@@ -73,7 +73,7 @@ safa_define('SITE_URL', $siteUrl);
 safa_define('SITE_TAGLINE', trim((string) safa_config_value('SITE_TAGLINE', 'Trending deals at the lowest prices')));
 safa_define('SITE_DESCRIPTION', trim((string) safa_config_value(
     'SITE_DESCRIPTION',
-    'Handpicked fashion, electronics, home and beauty deals from Meesho, Flipkart, Myntra, Ajio and Amazon.'
+    'Handpicked fashion, electronics, home and beauty deals from Flipkart, Myntra, Ajio and Amazon.'
 )));
 
 safa_define('SUPABASE_URL', $supabaseUrl);
@@ -121,7 +121,7 @@ safa_define('WEBP_QUALITY', max(55, min(95, (int) safa_config_value('WEBP_QUALIT
 
 safa_define('PRODUCTS_PER_PAGE', max(8, min(60, (int) safa_config_value('PRODUCTS_PER_PAGE', 24))));
 safa_define('PRODUCT_CATEGORIES', ['Fashion', 'Electronics', 'Home & Kitchen', 'Beauty', 'Footwear', 'Accessories']);
-safa_define('PLATFORM_FILTERS', ['Meesho', 'Flipkart', 'Myntra', 'Ajio', 'Amazon']);
+safa_define('PLATFORM_FILTERS', ['Flipkart', 'Myntra', 'Ajio', 'Amazon']);
 
 safa_define('HTTP_TIMEOUT', max(5, min(30, (int) safa_config_value('HTTP_TIMEOUT', 15))));
 safa_define('USER_AGENT', trim((string) safa_config_value(

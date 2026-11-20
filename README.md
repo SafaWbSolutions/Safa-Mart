@@ -176,8 +176,7 @@ curl "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
 - Verifies `X-Telegram-Bot-Api-Secret-Token` with `hash_equals`.
 - Optional chat allowlist plus per-chat rate limiting.
 - Extracts up to two URLs from a message caption/text.
-- Keeps Meesho (`meesho.com` / `msho.in`) links unchanged.
-- Converts supported stores through EarnKaro using `Authorization: Bearer <EARNKARO_TOKEN>`.
+- Converts supported stores (Flipkart, Myntra, Ajio, Amazon, etc.) through EarnKaro using `Authorization: Bearer <EARNKARO_TOKEN>`.
 - Scrapes `og:title`, `og:image`, OpenGraph price and JSON-LD `Product`/`Offer`.
 - Downloads up to three images, resizes them, converts to WebP with GD, and stores them under `uploads/products/YYYY/MM/`.
 - Upserts to Supabase on `original_url` with `Prefer: resolution=merge-duplicates`.
@@ -203,7 +202,7 @@ Push the repository to GitHub. Then open **Settings â†’ Secrets and variables â†
 | `UPLOAD_API_SECRET` | Yes | same value as in `config.local.php` |
 | `EARNKARO_TOKEN` | Recommended | EarnKaro API token |
 | `EARNKARO_API_URL` | Optional | converter endpoint override |
-| `FEED_URLS` | Optional | comma/newline-separated Meesho or EarnKaro category/feed URLs |
+| `FEED_URLS` | Optional | comma/newline-separated EarnKaro-supported category/feed URLs (Flipkart, Myntra, Ajio, Amazon, etc.) |
 
 The workflow runs at **minute 0 of every fourth hour** (`0 */4 * * *`) and can also be started manually:
 
@@ -216,7 +215,7 @@ Manual inputs:
 
 ### What the sync does
 
-1. Fetches `FEED_URLS`; if empty it uses Meesho home/category pages defined in `automation/scraper.py`.
+1. Fetches `FEED_URLS`; if empty it uses Flipkart category pages defined in `automation/scraper.py`.
 2. Extracts product links from anchors and embedded JSON, and filters to supported marketplaces.
 3. Scrapes OpenGraph/JSON-LD metadata and skips out-of-stock or priceless products.
 4. Converts affiliate links, downloads images, re-encodes them with Pillow, and uploads to `/api/upload.php` using `X-API-SECRET`.
@@ -229,7 +228,7 @@ Manual inputs:
 
 ### Feed notes
 
-Marketplace anti-bot systems frequently block GitHub datacenter IPs. If Meesho returns 403/CAPTCHA:
+Marketplace anti-bot systems frequently block GitHub datacenter IPs. If a marketplace returns 403/CAPTCHA:
 
 - Point `FEED_URLS` at an EarnKaro-supported feed or a permitted category endpoint.
 - Run the scraper from a small VPS instead of GitHub Actions.
@@ -315,7 +314,7 @@ Rotate the upload secret, Telegram secret and EarnKaro token if either endpoint 
 | Upload returns 401 | `X-API-SECRET` does not match `UPLOAD_API_SECRET`. |
 | Upload returns 422 | File is not a supported image, is too large, or the directory is not writable. |
 | Images 404 after deploy | `uploads/products/YYYY/MM/` was not uploaded or is not writable. |
-| EarnKaro conversion warning | Set `EARNKARO_TOKEN` and the correct `EARNKARO_API_URL`; Meesho links do not need conversion. |
+| EarnKaro conversion warning | Set `EARNKARO_TOKEN` and the correct `EARNKARO_API_URL`; unsupported stores keep original URL. |
 | GitHub scrape gets 403 | Merchant is blocking datacenter IPs; use permitted feed URLs or another runner. |
 | Cloudflare 524 on webhook | Send fewer links per message; check the WAF rule for `/api/webhook.php`. |
 | Prices outdated | Increase `STOCK_CHECK_LIMIT` or run the workflow more often. |

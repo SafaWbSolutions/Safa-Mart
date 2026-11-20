@@ -506,10 +506,6 @@ function convert_to_affiliate(string $url, ?string $platform = null): array
         return ['url' => $url, 'platform' => $platform, 'converted' => false, 'error' => 'Invalid product URL.'];
     }
 
-    if ($platform === 'Meesho') {
-        return ['url' => $url, 'platform' => 'Meesho', 'converted' => false, 'error' => null];
-    }
-
     if (!in_array($platform, EARNKARO_PLATFORMS, true)) {
         return [
             'url' => $url,

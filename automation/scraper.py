@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Safa Mart bulk product sync.
 
-Scrapes configured Meesho/EarnKaro category or feed pages, converts affiliate
+Scrapes configured EarnKaro-supported category or feed pages, converts affiliate
 links, uploads images to the Hostinger WebP endpoint, upserts products into
 Supabase, and verifies existing active products for broken links and stock.
 
@@ -41,11 +41,11 @@ ROOT = Path(__file__).resolve().parent
 LOG_FILE = ROOT / "sync.log"
 
 DEFAULT_FEEDS = [
-    "https://www.meesho.com/",
-    "https://www.meesho.com/c/women-sarees",
-    "https://www.meesho.com/c/men-tshirts",
-    "https://www.meesho.com/c/mobile-covers",
-    "https://www.meesho.com/c/home-decor",
+    "https://www.flipkart.com/",
+    "https://www.flipkart.com/women-clothing/pr?sid=clo,ash",
+    "https://www.flipkart.com/mens-clothing/pr?sid=clo,qvp",
+    "https://www.flipkart.com/mobile-accessories/pr?sid=tyy,4mr",
+    "https://www.flipkart.com/home-kitchen/pr?sid=j9e",
 ]
 
 USER_AGENT = os.getenv(
@@ -55,8 +55,6 @@ USER_AGENT = os.getenv(
 ).strip()
 
 PLATFORM_DOMAINS = {
-    "meesho.com": "Meesho",
-    "msho.in": "Meesho",
     "flipkart.com": "Flipkart",
     "fkrt.it": "Flipkart",
     "fkrt.co": "Flipkart",
@@ -266,8 +264,6 @@ def is_supported_product_url(url: str) -> bool:
     path = (urlsplit(url).path or "").lower()
     if any(token in path for token in ("/cart", "/checkout", "/login", "/account", "/search")):
         return False
-    if platform == "Meesho":
-        return "/p/" in path or host_of(url) == "msho.in"
     if platform == "Flipkart":
         return "/p/" in path
     if platform == "Amazon":
@@ -848,8 +844,6 @@ def find_affiliate_url(payload: Any, depth: int = 0) -> Optional[str]:
 
 
 def convert_affiliate(config: Config, session: requests.Session, url: str, platform: str) -> str:
-    if platform == "Meesho":
-        return url
     if platform not in EARNKARO_PLATFORMS:
         return url
     if not config.earnkaro_token:

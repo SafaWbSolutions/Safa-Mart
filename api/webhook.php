@@ -49,7 +49,7 @@ if (!telegram_chat_allowed($chatId)) {
 
 $text = trim((string) ($message['text'] ?? ($message['caption'] ?? '')));
 if ($text === '') {
-    telegram_send_message($chatId, 'Send me a product link from Meesho, Flipkart, Myntra, Ajio or Amazon and I will add it to the store.');
+    telegram_send_message($chatId, 'Send me a product link from Flipkart, Myntra, Ajio or Amazon and I will add it to the store.');
     json_response(['ok' => true, 'ignored' => 'empty message']);
 }
 
@@ -58,7 +58,7 @@ $command = strtolower(explode('@', (string) ($parts[0] ?? ''))[0]);
 if ($command === '/start' || $command === '/help') {
     $welcome = '🛍️ <b>' . telegram_escape(APP_NAME) . ' listing bot</b>' . "\n\n"
         . 'Send one or more product links (up to 2 per message). I will convert the affiliate link, download the image, optimise it to WebP and publish the product.' . "\n\n"
-        . "Supported: Meesho (kept as-is), Flipkart, Myntra, Ajio, Amazon and more.\n"
+        . "Supported: Flipkart, Myntra, Ajio, Amazon and more.\n"
         . "Commands: /id – show this chat ID\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
@@ -96,7 +96,7 @@ foreach ($urlMatches[0] as $url) {
     }
 }
 if (!$urls) {
-    telegram_send_message($chatId, 'Please include a product URL in the message. Example: https://www.meesho.com/...');
+    telegram_send_message($chatId, 'Please include a product URL in the message. Example: https://www.flipkart.com/...');
     json_response(['ok' => true, 'ignored' => 'no urls']);
 }
 
@@ -202,7 +202,7 @@ foreach ($urls as $url) {
             . '🏬 ' . telegram_escape($platform)
             . ' · 🏷️ ' . telegram_escape($category) . "\n"
             . '🔗 ' . telegram_escape(site_url('product.php?slug=' . rawurlencode($slug)));
-        if (!$affiliate['converted'] && !empty($affiliate['error']) && $platform !== 'Meesho') {
+        if (!$affiliate['converted'] && !empty($affiliate['error'])) {
             $confirmation .= "\n⚠️ " . telegram_escape($affiliate['error']);
         }
         telegram_send_message($chatId, $confirmation);

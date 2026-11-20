@@ -33,7 +33,7 @@ $pageTitle = $searchQuery !== ''
     ? 'Search results for “' . $searchQuery . '” | ' . APP_NAME
     : ($hasFilters ? 'Deals | ' . APP_NAME : APP_NAME . ' – ' . SITE_TAGLINE);
 $pageDescription = $searchQuery !== ''
-    ? 'Shop ' . $searchQuery . ' deals from Meesho, Flipkart, Myntra, Ajio and Amazon at the lowest prices.'
+    ? 'Shop ' . $searchQuery . ' deals from Flipkart, Myntra, Ajio and Amazon at the lowest prices.'
     : SITE_DESCRIPTION;
 $supabaseOrigin = '';
 if (SUPABASE_URL !== '') {
