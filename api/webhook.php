@@ -102,6 +102,22 @@ if ($command === '/debug') {
     $lines[] = '• Platform: ' . telegram_escape($debugPlatform);
     $lines[] = '• Single product page: ' . (is_product_page_url($resolved) ? 'yes' : 'no (listing/campaign link)');
 
+    if (!is_product_page_url($resolved) && $debugPlatform !== 'Other') {
+        $expandDebug = [];
+        $expanded = expand_collection_url($resolved, 2, affiliate_params_from_url($debugUrl), $expandDebug);
+        $lines[] = '• Collection products found: ' . count($expanded);
+        foreach (array_slice($expandDebug['attempts'] ?? [], 0, 4) as $attempt) {
+            $attemptLine = '   – HTTP ' . (int) ($attempt['status'] ?? 0) . ' · ' . (int) ($attempt['bytes'] ?? 0) . ' bytes';
+            if (!empty($attempt['error'])) {
+                $attemptLine .= ' · ' . telegram_escape((string) $attempt['error']);
+            }
+            $lines[] = $attemptLine;
+        }
+        foreach (array_slice($expanded, 0, 2) as $expandedItem) {
+            $lines[] = '   • ' . telegram_escape($expandedItem);
+        }
+    }
+
     if (!in_array($debugPlatform, EARNKARO_PLATFORMS, true)) {
         $lines[] = '• EarnKaro: this store is not in the supported list';
     } else {
@@ -293,10 +309,13 @@ if (!$urls) {
 // Single product pages are the only thing the storefront can show, so such a
 // link is expanded into a few individual products before listing starts.
 $expandedUrls = [];
+$expansionDebug = [];
 foreach ($urls as $url) {
     $candidate = resolve_merchant_url($url, 4, false);
     if ($candidate !== '' && !is_product_page_url($candidate) && detect_platform($candidate) !== 'Other') {
-        $expanded = expand_collection_url($candidate, 4, affiliate_params_from_url($url));
+        $expandDebug = [];
+        $expanded = expand_collection_url($candidate, 4, affiliate_params_from_url($url), $expandDebug);
+        $expansionDebug[$url] = $expandDebug;
         if ($expanded) {
             foreach ($expanded as $expandedUrl) {
                 if (!in_array($expandedUrl, $expandedUrls, true)) {
@@ -468,6 +487,13 @@ foreach ($urls as $url) {
         telegram_send_message($chatId, $confirmation);
     } catch (Throwable $error) {
         $failed++;
+        $detail = '';
+        $attempts = $expansionDebug[$url]['attempts'] ?? [];
+        if ($attempts) {
+            $last = end($attempts);
+            $detail = '🧪 HTTP ' . (int) ($last['status'] ?? 0)
+                . ' · ' . (int) ($last['bytes'] ?? 0) . " bytes\n";
+        }
         app_log('error', 'Telegram product listing failed', [
             'url'   => $url,
             'error' => $error->getMessage(),
@@ -476,6 +502,7 @@ foreach ($urls as $url) {
             $chatId,
             '❌ <b>Could not list this link</b>' . "\n"
             . telegram_escape($error->getMessage()) . "\n"
+            . $detail
             . telegram_escape($url)
         );
     }

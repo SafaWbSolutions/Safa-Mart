@@ -458,8 +458,10 @@ function ajio_simple_search_url(string $url): string
  *
  * @return list<string>
  */
-function expand_collection_url(string $url, int $limit = 2, array $affiliateParams = []): array
+function expand_collection_url(string $url, int $limit = 2, array $affiliateParams = [], ?array &$debug = null): array
 {
+    $debug = is_array($debug) ? $debug : [];
+    $debug['attempts'] = [];
     $limit = max(1, min(8, $limit));
     $platform = detect_platform($url);
     if ($platform === 'Other') {
@@ -511,17 +513,24 @@ function expand_collection_url(string $url, int $limit = 2, array $affiliatePara
         }
     };
 
-    $fetch = static function (string $target): string {
+    $fetch = static function (string $target) use (&$debug): string {
         $response = http_request($target, [
             'timeout'   => HTTP_TIMEOUT,
             'max_bytes' => 6291456,
             'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
             'referer'   => origin_of_url($target),
         ]);
+        $debug['attempts'][] = [
+            'url'    => $target,
+            'status' => (int) $response['status'],
+            'bytes'  => strlen((string) $response['body']),
+            'error'  => (string) ($response['error'] ?? ''),
+        ];
         if (!$response['ok'] || (int) $response['status'] !== 200) {
             app_log('info', 'Collection fetch failed', [
                 'url'    => $target,
                 'status' => (int) $response['status'],
+                'error'  => (string) ($response['error'] ?? ''),
             ]);
             return '';
         }
@@ -550,6 +559,8 @@ function expand_collection_url(string $url, int $limit = 2, array $affiliatePara
         'platform' => $platform,
         'found'    => count($found),
     ]);
+    $debug['found'] = count($found);
+    $debug['platform'] = $platform;
 
     if (!$found) {
         return [];
