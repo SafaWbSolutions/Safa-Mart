@@ -33,8 +33,11 @@ function pwa_client_config(): array
         $scope = rtrim($path, '/') . '/';
     }
 
+    $swFile = SAFA_ROOT . '/sw.js';
+    $swVersion = is_file($swFile) ? (string) filemtime($swFile) : APP_VERSION;
+
     return [
-        'swUrl'      => site_url('sw.js'),
+        'swUrl'      => site_url('sw.js') . '?v=' . rawurlencode($swVersion),
         'scope'      => $scope,
         'siteUrl'    => rtrim(site_url(), '/'),
         'pushApi'    => site_url('api/push.php'),

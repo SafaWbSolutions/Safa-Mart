@@ -27,6 +27,7 @@ AddDefaultCharset UTF-8
 
 <IfModule mod_mime.c>
     AddType application/manifest+json .webmanifest
+    AddType application/javascript .js
 </IfModule>
 
 <IfModule mod_expires.c>
