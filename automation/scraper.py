@@ -41,11 +41,9 @@ ROOT = Path(__file__).resolve().parent
 LOG_FILE = ROOT / "sync.log"
 
 DEFAULT_FEEDS = [
-    "https://www.flipkart.com/",
     "https://www.flipkart.com/women-clothing/pr?sid=clo,ash",
     "https://www.flipkart.com/mens-clothing/pr?sid=clo,qvp",
     "https://www.flipkart.com/mobile-accessories/pr?sid=tyy,4mr",
-    "https://www.flipkart.com/home-kitchen/pr?sid=j9e",
 ]
 
 USER_AGENT = os.getenv(

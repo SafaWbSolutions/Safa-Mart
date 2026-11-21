@@ -9,25 +9,25 @@ on:
       max_products:
         description: "Maximum new products to publish in this run"
         required: false
-        default: "60"
+        default: "30"
       skip_stock_check:
         description: "Skip checking existing products for broken links/stock"
         required: false
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
 
 concurrency:
   group: safa-mart-product-sync
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sync:
     name: Scrape, upload images and upsert products
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       PYTHONUNBUFFERED: "1"
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -37,17 +37,17 @@ jobs:
       EARNKARO_TOKEN: ${{ secrets.EARNKARO_TOKEN }}
       EARNKARO_API_URL: ${{ secrets.EARNKARO_API_URL }}
       FEED_URLS: ${{ secrets.FEED_URLS }}
-      MAX_PRODUCTS: ${{ github.event.inputs.max_products || '60' }}
-      PRODUCTS_PER_FEED: "20"
-      STOCK_CHECK_LIMIT: "150"
-      SKIP_STOCK_CHECK: ${{ github.event.inputs.skip_stock_check || 'false' }}
+      MAX_PRODUCTS: ${{ github.event.inputs.max_products || '30' }}
+      PRODUCTS_PER_FEED: "10"
+      STOCK_CHECK_LIMIT: "50"
+      SKIP_STOCK_CHECK: ${{ github.event.inputs.skip_stock_check || 'true' }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.5.0
         with:
           python-version: "3.12"
           cache: "pip"
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload sync log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.0
         with:
           name: safa-mart-sync-log
           path: |
