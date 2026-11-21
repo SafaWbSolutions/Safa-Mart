@@ -783,6 +783,14 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
         rating = normalize_price(first_meta(meta, ["product:rating:value"]))
     if rating_count <= 0:
         rating_count = int(normalize_price(first_meta(meta, ["product:rating:count"])))
+    if rating <= 0:
+        myntra_rating = re.search(
+            r'\\?"ratings\\?"\s*:\s*\{\s*"averageRating"\s*:\s*([0-9.]+)\s*,\s*"totalCount"\s*:\s*(\d+)',
+            html,
+        )
+        if myntra_rating:
+            rating = float(myntra_rating.group(1))
+            rating_count = int(myntra_rating.group(2))
     rating = max(0.0, min(5.0, round(rating, 2)))
 
     specs: list[dict[str, str]] = []

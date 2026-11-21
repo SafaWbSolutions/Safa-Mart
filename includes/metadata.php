@@ -979,6 +979,11 @@ function scrape_product_metadata(string $url): array
     if ($ratingCount <= 0) {
         $ratingCount = (int) normalize_price($meta['product:rating:count'] ?? 0);
     }
+    // Myntra keeps the rating in its own JSON blob.
+    if ($rating <= 0 && preg_match('/\\\\?"ratings\\\\?"\s*:\s*\{\s*"averageRating"\s*:\s*([0-9.]+)\s*,\s*"totalCount"\s*:\s*(\d+)/', $html, $ratingMatch)) {
+        $rating = (float) $ratingMatch[1];
+        $ratingCount = (int) $ratingMatch[2];
+    }
     $rating = max(0.0, min(5.0, round($rating, 2)));
 
     $images = collect_image_urls($meta, $jsonProduct, $response['effective_url'] ?? $url, $html);
