@@ -21,7 +21,8 @@ permissions:
 
 concurrency:
   group: safa-mart-product-sync
-  cancel-in-progress: true
+  # Manual trigger ke waqt pehle wala run cancel na ho; naya run queue mein rahe.
+  cancel-in-progress: false
 
 jobs:
   sync:
@@ -77,6 +78,35 @@ jobs:
 
       - name: Run product sync
         run: python automation/scraper.py
+
+      - name: Summarise sync result
+        if: always()
+        run: |
+          echo "## Safa Mart sync summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f automation/sync.log ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E "Prepared:|Upserted|Skipped|Feed failed|Feed returned|Sync finished|EarnKaro|image" automation/sync.log | tail -n 60 >> "$GITHUB_STEP_SUMMARY" || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "sync.log not found." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail when nothing was prepared
+        if: always()
+        run: |
+          if [ ! -f automation/sync.log ]; then
+            echo "::warning::sync.log missing; skipping the zero-product check."
+            exit 0
+          fi
+          if grep -q "\[dry-run\]" automation/sync.log; then
+            exit 0
+          fi
+          if grep -q "Prepared:" automation/sync.log; then
+            echo "Products were prepared this run."
+            exit 0
+          fi
+          echo "::error::No products were prepared. Open the sync.log artifact for 403/timeout details."
+          exit 1
 
       - name: Upload sync log
         if: always()
