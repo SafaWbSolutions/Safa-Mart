@@ -12,19 +12,74 @@ if (!in_array($platform, PLATFORM_FILTERS, true)) {
     $platform = '';
 }
 
-$filters = ['q' => $searchQuery, 'category' => $category, 'platform' => $platform];
+$sort = trim((string) ($_GET['sort'] ?? ''));
+if (!in_array($sort, ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rating_desc'], true)) {
+    $sort = '';
+}
+$minPrice = max(0.0, (float) ($_GET['min_price'] ?? 0));
+$maxPrice = max(0.0, (float) ($_GET['max_price'] ?? 0));
+if ($minPrice > 0 && $maxPrice > 0 && $minPrice > $maxPrice) {
+    $swapPrice = $minPrice;
+    $minPrice = $maxPrice;
+    $maxPrice = $swapPrice;
+}
+$minDiscount = (int) ($_GET['min_discount'] ?? 0);
+if (!in_array($minDiscount, [10, 25, 40, 60], true)) {
+    $minDiscount = 0;
+}
+$brand = clean_text((string) ($_GET['brand'] ?? ''));
+$brand = function_exists('mb_substr') ? mb_substr($brand, 0, 80, 'UTF-8') : substr($brand, 0, 80);
+$minRating = (float) ($_GET['min_rating'] ?? 0);
+if (!in_array($minRating, [3.0, 4.0, 4.5], true)) {
+    $minRating = 0.0;
+}
+
+$filters = [
+    'q'            => $searchQuery,
+    'category'     => $category,
+    'platform'     => $platform,
+    'sort'         => $sort,
+    'min_price'    => $minPrice,
+    'max_price'    => $maxPrice,
+    'min_discount' => $minDiscount,
+    'brand'        => $brand,
+    'min_rating'   => $minRating,
+];
 $products = fetch_storefront_products($filters, PRODUCTS_PER_PAGE);
+$facets = fetch_filter_facets();
 $hasMore = count($products) >= PRODUCTS_PER_PAGE;
-$hasFilters = $searchQuery !== '' || $category !== '' || $platform !== '';
+$hasFilters = $searchQuery !== '' || $category !== '' || $platform !== ''
+    || $sort !== '' || $minPrice > 0 || $maxPrice > 0
+    || $minDiscount > 0 || $brand !== '' || $minRating > 0;
 $configMissing = missing_config(['SUPABASE_URL', 'SUPABASE_ANON_KEY']);
 
-$buildUrl = static function (array $changes) use ($searchQuery, $category, $platform): string {
-    $params = ['q' => $searchQuery, 'category' => $category, 'platform' => $platform];
+$buildUrl = static function (array $changes) use (
+    $searchQuery,
+    $category,
+    $platform,
+    $sort,
+    $minPrice,
+    $maxPrice,
+    $minDiscount,
+    $brand,
+    $minRating
+): string {
+    $params = [
+        'q'            => $searchQuery,
+        'category'     => $category,
+        'platform'     => $platform,
+        'sort'         => $sort,
+        'min_price'    => $minPrice > 0 ? $minPrice : '',
+        'max_price'    => $maxPrice > 0 ? $maxPrice : '',
+        'min_discount' => $minDiscount > 0 ? $minDiscount : '',
+        'brand'        => $brand,
+        'min_rating'   => $minRating > 0 ? $minRating : '',
+    ];
     foreach ($changes as $key => $value) {
         $params[$key] = $value;
     }
     $params = array_filter($params, static function ($value): bool {
-        return $value !== '' && $value !== null;
+        return $value !== '' && $value !== null && $value !== 0 && $value !== 0.0 && $value !== '0';
     });
     return 'index.php' . ($params ? '?' . http_build_query($params) : '');
 };
@@ -93,9 +148,15 @@ if (SUPABASE_URL !== '') {
             'siteUrl'     => rtrim(site_url(), '/'),
             'pageSize'    => PRODUCTS_PER_PAGE,
             'current'     => [
-                'q'        => $searchQuery,
-                'category' => $category,
-                'platform' => $platform,
+                'q'            => $searchQuery,
+                'category'     => $category,
+                'platform'     => $platform,
+                'sort'         => $sort,
+                'minPrice'     => $minPrice,
+                'maxPrice'     => $maxPrice,
+                'minDiscount'  => $minDiscount,
+                'brand'        => $brand,
+                'minRating'    => $minRating,
             ],
         ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     </script>
@@ -169,6 +230,117 @@ if (SUPABASE_URL !== '') {
                href="<?= e($buildUrl(['category' => $cat])) ?>" data-category="<?= e($cat) ?>"><?= e($cat) ?></a>
         <?php endforeach; ?>
     </nav>
+
+    <?php
+    $activeFilterCount = 0;
+    if ($sort !== '') {
+        $activeFilterCount++;
+    }
+    if ($brand !== '') {
+        $activeFilterCount++;
+    }
+    if ($minPrice > 0 || $maxPrice > 0) {
+        $activeFilterCount++;
+    }
+    if ($minDiscount > 0) {
+        $activeFilterCount++;
+    }
+    if ($minRating > 0) {
+        $activeFilterCount++;
+    }
+    ?>
+    <details class="filter-panel" <?= $hasFilters ? 'open' : '' ?>>
+        <summary class="filter-summary">
+            <span class="filter-summary-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 6h16M7 12h10M10 18h4"/>
+                </svg>
+            </span>
+            <span>Filters &amp; sort</span>
+            <?php if ($activeFilterCount > 0): ?>
+                <span class="filter-count"><?= $activeFilterCount ?> active</span>
+            <?php endif; ?>
+            <svg class="filter-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="m6 9 6 6 6-6"/>
+            </svg>
+        </summary>
+
+        <form class="filter-form" method="get" action="index.php">
+            <?php if ($searchQuery !== ''): ?><input type="hidden" name="q" value="<?= e($searchQuery) ?>"><?php endif; ?>
+            <?php if ($category !== ''): ?><input type="hidden" name="category" value="<?= e($category) ?>"><?php endif; ?>
+            <?php if ($platform !== ''): ?><input type="hidden" name="platform" value="<?= e($platform) ?>"><?php endif; ?>
+
+            <label class="filter-field">
+                <span>Sort by</span>
+                <select name="sort">
+                    <option value="" <?= $sort === '' ? 'selected' : '' ?>>Newest first</option>
+                    <option value="price_asc" <?= $sort === 'price_asc' ? 'selected' : '' ?>>Price: low to high</option>
+                    <option value="price_desc" <?= $sort === 'price_desc' ? 'selected' : '' ?>>Price: high to low</option>
+                    <option value="discount_desc" <?= $sort === 'discount_desc' ? 'selected' : '' ?>>Biggest discount</option>
+                    <option value="rating_desc" <?= $sort === 'rating_desc' ? 'selected' : '' ?>>Top rated</option>
+                </select>
+            </label>
+
+            <?php if (!empty($facets['brands']) || $brand !== ''): ?>
+                <label class="filter-field">
+                    <span>Brand</span>
+                    <select name="brand">
+                        <option value="">All brands</option>
+                        <?php
+                        $brandOptions = $facets['brands'];
+                        if ($brand !== '' && !in_array($brand, $brandOptions, true)) {
+                            $brandOptions[] = $brand;
+                        }
+                        ?>
+                        <?php foreach ($brandOptions as $brandOption): ?>
+                            <option value="<?= e($brandOption) ?>" <?= $brand === $brandOption ? 'selected' : '' ?>><?= e($brandOption) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+            <?php endif; ?>
+
+            <label class="filter-field filter-field-price">
+                <span>Price (₹)</span>
+                <div class="price-inputs">
+                    <input type="number" name="min_price" min="0" step="10" inputmode="numeric"
+                           placeholder="<?= $facets['price_min'] > 0 ? (int) $facets['price_min'] : 'Min' ?>"
+                           value="<?= $minPrice > 0 ? (int) $minPrice : '' ?>" aria-label="Minimum price">
+                    <span aria-hidden="true">–</span>
+                    <input type="number" name="max_price" min="0" step="10" inputmode="numeric"
+                           placeholder="<?= $facets['price_max'] > 0 ? (int) $facets['price_max'] : 'Max' ?>"
+                           value="<?= $maxPrice > 0 ? (int) $maxPrice : '' ?>" aria-label="Maximum price">
+                </div>
+            </label>
+
+            <label class="filter-field">
+                <span>Discount</span>
+                <select name="min_discount">
+                    <option value="" <?= $minDiscount === 0 ? 'selected' : '' ?>>Any discount</option>
+                    <option value="10" <?= $minDiscount === 10 ? 'selected' : '' ?>>10% or more</option>
+                    <option value="25" <?= $minDiscount === 25 ? 'selected' : '' ?>>25% or more</option>
+                    <option value="40" <?= $minDiscount === 40 ? 'selected' : '' ?>>40% or more</option>
+                    <option value="60" <?= $minDiscount === 60 ? 'selected' : '' ?>>60% or more</option>
+                </select>
+            </label>
+
+            <?php if (!empty($facets['has_rating']) || $minRating > 0): ?>
+                <label class="filter-field">
+                    <span>Rating</span>
+                    <select name="min_rating">
+                        <option value="" <?= $minRating <= 0 ? 'selected' : '' ?>>Any rating</option>
+                        <option value="3" <?= $minRating === 3.0 ? 'selected' : '' ?>>3★ &amp; up</option>
+                        <option value="4" <?= $minRating === 4.0 ? 'selected' : '' ?>>4★ &amp; up</option>
+                        <option value="4.5" <?= $minRating === 4.5 ? 'selected' : '' ?>>4.5★ &amp; up</option>
+                    </select>
+                </label>
+            <?php endif; ?>
+
+            <div class="filter-actions">
+                <button type="submit" class="filter-apply">Apply filters</button>
+                <a class="filter-reset" href="<?= e(site_url('index.php')) ?>">Reset</a>
+            </div>
+        </form>
+    </details>
 
     <?php if (!$hasFilters): ?>
         <section class="hero-banner" aria-label="Safa Mart highlights">

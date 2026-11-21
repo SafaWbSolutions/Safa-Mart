@@ -834,6 +834,21 @@ function scrape_product_metadata(string $url): array
         $categoryHint = clean_text($jsonProduct['category']);
     }
 
+    $rating = 0.0;
+    $ratingCount = 0;
+    $aggregate = $jsonProduct['aggregateRating'] ?? null;
+    if (is_array($aggregate)) {
+        $rating = (float) ($aggregate['ratingValue'] ?? 0);
+        $ratingCount = (int) ($aggregate['ratingCount'] ?? ($aggregate['reviewCount'] ?? 0));
+    }
+    if ($rating <= 0) {
+        $rating = normalize_price($meta['product:rating:value'] ?? 0);
+    }
+    if ($ratingCount <= 0) {
+        $ratingCount = (int) normalize_price($meta['product:rating:count'] ?? 0);
+    }
+    $rating = max(0.0, min(5.0, round($rating, 2)));
+
     $images = collect_image_urls($meta, $jsonProduct, $response['effective_url'] ?? $url, $html);
 
     // DigiHaat / ONDC pages hide the real product in the embedded JSON.
@@ -862,6 +877,8 @@ function scrape_product_metadata(string $url): array
         'mrp'            => $mrp,
         'currency'       => $currency,
         'brand'          => clean_text($brand),
+        'rating'         => $rating,
+        'rating_count'   => $ratingCount,
         'category_hint'  => clean_text($categoryHint),
         'availability'   => $availability,
         'platform'       => detect_platform($response['effective_url'] ?? $url),

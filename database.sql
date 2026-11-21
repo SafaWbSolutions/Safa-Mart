@@ -42,6 +42,9 @@ create table if not exists public.products (
 -- Add columns introduced by later releases without failing on existing installs.
 alter table public.products add column if not exists description text not null default '';
 alter table public.products add column if not exists last_checked_at timestamptz;
+alter table public.products add column if not exists brand text not null default '';
+alter table public.products add column if not exists rating numeric(3,2) not null default 0;
+alter table public.products add column if not exists rating_count integer not null default 0;
 
 comment on table public.products is 'Affiliate product catalogue for Safa Mart.';
 comment on column public.products.original_url is 'Canonical merchant URL; used as the upsert conflict target.';
@@ -133,6 +136,18 @@ create index if not exists products_clicks_idx
 
 create index if not exists products_last_checked_idx
     on public.products (last_checked_at asc nulls first)
+    where is_active = true;
+
+create index if not exists products_brand_idx
+    on public.products (brand)
+    where is_active = true;
+
+create index if not exists products_discount_idx
+    on public.products (discount_percent desc)
+    where is_active = true;
+
+create index if not exists products_rating_idx
+    on public.products (rating desc)
     where is_active = true;
 
 create index if not exists products_title_trgm_idx

@@ -24,6 +24,9 @@ if ($platform === '' || $platform === 'Other') {
     $platform = 'Store';
 }
 $category = clean_text($product['category'] ?? 'Other');
+$brand = clean_text((string) ($product['brand'] ?? ''));
+$rating = (float) ($product['rating'] ?? 0);
+$ratingCount = (int) ($product['rating_count'] ?? 0);
 $description = clean_text($product['description'] ?? '');
 if ($description === '') {
     $description = $title . ' available at ' . ($price > 0 ? inr($price) : 'the best price')
@@ -55,7 +58,7 @@ $schema = [
     'description' => truncate_text($description, 900),
     'sku'         => (string) $id,
     'url'         => $productUrl,
-    'brand'       => ['@type' => 'Brand', 'name' => $platform],
+    'brand'       => ['@type' => 'Brand', 'name' => $brand !== '' ? $brand : $platform],
     'offers'      => [
         '@type'         => 'Offer',
         'url'           => $buyUrl,
@@ -68,6 +71,14 @@ $schema = [
 ];
 if ($gallery) {
     $schema['image'] = array_values($gallery);
+}
+if ($rating > 0) {
+    $schema['aggregateRating'] = [
+        '@type'       => 'AggregateRating',
+        'ratingValue' => $rating,
+        'bestRating'  => 5,
+        'reviewCount' => max(1, $ratingCount),
+    ];
 }
 $breadcrumbSchema = [
     '@context'        => 'https://schema.org',
@@ -226,9 +237,22 @@ $breadcrumbSchema = [
             <div class="product-kicker">
                 <span class="platform-badge platform-<?= e($platformClass) ?>"><?= e($platform) ?></span>
                 <span class="category-tag"><?= e($category !== '' ? $category : 'Deal') ?></span>
+                <?php if ($brand !== ''): ?>
+                    <span class="brand-tag"><?= e($brand) ?></span>
+                <?php endif; ?>
             </div>
 
             <h1 class="product-h1"><?= e($title) ?></h1>
+
+            <?php if ($rating > 0): ?>
+                <div class="product-rating-row">
+                    <span class="rating-badge"><span aria-hidden="true">★</span> <?= e(number_format($rating, 1)) ?></span>
+                    <?php if ($ratingCount > 0): ?>
+                        <span class="rating-text"><?= e(number_format($ratingCount)) ?> ratings</span>
+                    <?php endif; ?>
+                    <span class="rating-source">on <?= e($platform) ?></span>
+                </div>
+            <?php endif; ?>
 
             <div class="detail-price-block">
                 <span class="detail-price"><?= $price > 0 ? e(inr($price)) : 'Price on request' ?></span>
@@ -302,8 +326,14 @@ $breadcrumbSchema = [
         <h2 id="aboutProduct">About this product</h2>
         <p><?= e($description) ?></p>
         <div class="detail-facts">
+            <?php if ($brand !== ''): ?>
+                <div><span>Brand</span><strong><?= e($brand) ?></strong></div>
+            <?php endif; ?>
             <div><span>Category</span><strong><?= e($category !== '' ? $category : 'Deal') ?></strong></div>
             <div><span>Store</span><strong><?= e($platform) ?></strong></div>
+            <?php if ($rating > 0): ?>
+                <div><span>Rating</span><strong>★ <?= e(number_format($rating, 1)) ?><?= $ratingCount > 0 ? ' (' . e(number_format($ratingCount)) . ')' : '' ?></strong></div>
+            <?php endif; ?>
             <div><span>Price checked</span><strong><?= e($lastChecked !== '' ? $lastChecked : 'Recently') ?></strong></div>
         </div>
     </section>

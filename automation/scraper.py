@@ -767,6 +767,24 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
     if not category_hint and isinstance(product_ld.get("category"), str):
         category_hint = clean_text(product_ld["category"])
 
+    rating = 0.0
+    rating_count = 0
+    aggregate = product_ld.get("aggregateRating") if isinstance(product_ld, dict) else None
+    if isinstance(aggregate, dict):
+        try:
+            rating = float(aggregate.get("ratingValue") or 0)
+        except (TypeError, ValueError):
+            rating = 0.0
+        try:
+            rating_count = int(float(aggregate.get("ratingCount") or aggregate.get("reviewCount") or 0))
+        except (TypeError, ValueError):
+            rating_count = 0
+    if rating <= 0:
+        rating = normalize_price(first_meta(meta, ["product:rating:value"]))
+    if rating_count <= 0:
+        rating_count = int(normalize_price(first_meta(meta, ["product:rating:count"])))
+    rating = max(0.0, min(5.0, round(rating, 2)))
+
     canonical_tag = soup.find("link", rel=lambda value: value and "canonical" in value)
     canonical = canonical_tag.get("href", "") if canonical_tag else first_meta(meta, ["og:url"])
     canonical = urljoin(base_url, canonical) if canonical else base_url
@@ -781,6 +799,8 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
         "currency": currency,
         "availability": availability,
         "brand": brand,
+        "rating": rating,
+        "rating_count": rating_count,
         "category_hint": category_hint,
         "canonical_url": canonical,
         "platform": detect_platform(base_url),
@@ -1409,6 +1429,9 @@ def build_product_payload(
         "discount_percent": discount,
         "category": category,
         "source_platform": platform,
+        "brand": truncate(metadata.get("brand", ""), 120),
+        "rating": float(metadata.get("rating") or 0),
+        "rating_count": int(metadata.get("rating_count") or 0),
         "thumbnail_url": gallery[0],
         "gallery_urls": gallery,
         "affiliate_url": affiliate_url,

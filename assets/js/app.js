@@ -22,6 +22,12 @@
         q: current.q || '',
         category: current.category || '',
         platform: current.platform || '',
+        sort: current.sort || '',
+        minPrice: Number(current.minPrice) || 0,
+        maxPrice: Number(current.maxPrice) || 0,
+        minDiscount: Number(current.minDiscount) || 0,
+        brand: current.brand || '',
+        minRating: Number(current.minRating) || 0,
         offset: grid ? (Number(grid.dataset.offset) || 0) : 0,
         loaded: grid ? grid.querySelectorAll('.product-card').length : 0,
         hasMore: grid ? grid.dataset.hasMore === '1' : false,
@@ -60,6 +66,17 @@
             minimumFractionDigits: 0,
             maximumFractionDigits: decimals
         });
+    }
+
+    function compactCount(value) {
+        var number = Number(value) || 0;
+        if (number >= 1000000) {
+            return (number / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        }
+        if (number >= 1000) {
+            return (number / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+        }
+        return String(number);
     }
 
     function calculateDiscount(mrp, price) {
@@ -111,6 +128,16 @@
         }
         var image = safeImageUrl(product.thumbnail_url);
         var slug = String(product.slug || '');
+        var brand = String(product.brand || '').trim();
+        var rating = Number(product.rating) || 0;
+        var ratingCount = Number(product.rating_count) || 0;
+        var brandHtml = brand ? '<span class="product-brand">' + escapeHtml(brand) + '</span>' : '';
+        var ratingHtml = rating > 0
+            ? '<div class="product-meta-row"><span class="product-rating"><span class="rating-star">★</span> '
+                + rating.toFixed(1)
+                + (ratingCount > 0 ? ' <span class="rating-count">(' + compactCount(ratingCount) + ')</span>' : '')
+                + '</span></div>'
+            : '';
         var productUrl = 'product.php?slug=' + encodeURIComponent(slug);
         var buyUrl = 'go.php?id=' + encodeURIComponent(id);
         var media = image
@@ -130,7 +157,9 @@
             + '<span class="platform-badge platform-' + escapeHtml(platformClass(platform)) + '">' + escapeHtml(platform) + '</span>'
             + '</a>'
             + '<div class="product-body">'
+            + brandHtml
             + '<a class="product-title" href="' + escapeHtml(productUrl) + '" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</a>'
+            + ratingHtml
             + '<div class="product-price-row"><span class="product-price">' + (price > 0 ? formatINR(price) : 'Price on request') + '</span>' + mrpHtml + '</div>'
             + '<a class="buy-button" href="' + escapeHtml(buyUrl) + '" target="_blank" rel="nofollow sponsored noopener" aria-label="Buy ' + escapeHtml(title) + ' now">'
             + '<span>Buy Now</span>'
@@ -200,6 +229,24 @@
         if (state.platform !== '') {
             params.set('platform', state.platform);
         }
+        if (state.sort !== '') {
+            params.set('sort', state.sort);
+        }
+        if (state.brand !== '') {
+            params.set('brand', state.brand);
+        }
+        if (state.minPrice > 0) {
+            params.set('min_price', String(state.minPrice));
+        }
+        if (state.maxPrice > 0) {
+            params.set('max_price', String(state.maxPrice));
+        }
+        if (state.minDiscount > 0) {
+            params.set('min_discount', String(state.minDiscount));
+        }
+        if (state.minRating > 0) {
+            params.set('min_rating', String(state.minRating));
+        }
         var query = params.toString();
         var next = window.location.pathname + (query ? '?' + query : '');
         history.replaceState(null, '', next);
@@ -240,7 +287,17 @@
         var params = new URLSearchParams();
         params.set('select', '*');
         params.set('is_active', 'eq.true');
-        params.set('order', 'created_at.desc');
+        var order = 'created_at.desc';
+        if (state.sort === 'price_asc') {
+            order = 'price.asc';
+        } else if (state.sort === 'price_desc') {
+            order = 'price.desc';
+        } else if (state.sort === 'discount_desc') {
+            order = 'discount_percent.desc';
+        } else if (state.sort === 'rating_desc') {
+            order = 'rating.desc';
+        }
+        params.set('order', order);
         params.set('limit', String(pageSize));
         params.set('offset', String(offset));
 
@@ -250,10 +307,25 @@
         if (state.platform !== '') {
             params.set('source_platform', 'eq.' + state.platform);
         }
+        if (state.brand !== '') {
+            params.set('brand', 'eq.' + state.brand);
+        }
+        if (state.minPrice > 0) {
+            params.append('price', 'gte.' + state.minPrice);
+        }
+        if (state.maxPrice > 0) {
+            params.append('price', 'lte.' + state.maxPrice);
+        }
+        if (state.minDiscount > 0) {
+            params.set('discount_percent', 'gte.' + state.minDiscount);
+        }
+        if (state.minRating > 0) {
+            params.set('rating', 'gte.' + state.minRating);
+        }
         var search = sanitizeSearch(state.q);
         if (search !== '') {
             var pattern = '*' + search + '*';
-            params.set('or', '(title.ilike.' + pattern + ',category.ilike.' + pattern + ',source_platform.ilike.' + pattern + ')');
+            params.set('or', '(title.ilike.' + pattern + ',category.ilike.' + pattern + ',source_platform.ilike.' + pattern + ',brand.ilike.' + pattern + ')');
         }
         return params.toString().replace(/\+/g, '%20');
     }

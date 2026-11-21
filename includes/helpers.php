@@ -810,6 +810,17 @@ function product_gallery(array $product): array
     return $final;
 }
 
+function compact_count(int $value): string
+{
+    if ($value >= 1000000) {
+        return rtrim(rtrim(number_format($value / 1000000, 1, '.', ''), '0'), '.') . 'M';
+    }
+    if ($value >= 1000) {
+        return rtrim(rtrim(number_format($value / 1000, 1, '.', ''), '0'), '.') . 'k';
+    }
+    return (string) $value;
+}
+
 function render_product_card(array $product): string
 {
     $id = (int) ($product['id'] ?? 0);
@@ -842,6 +853,19 @@ function render_product_card(array $product): string
         $image = '';
     }
 
+    $brand = clean_text((string) ($product['brand'] ?? ''));
+    $rating = (float) ($product['rating'] ?? 0);
+    $ratingCount = (int) ($product['rating_count'] ?? 0);
+    $brandHtml = $brand !== ''
+        ? '<span class="product-brand">' . e($brand) . '</span>'
+        : '';
+    $ratingHtml = $rating > 0
+        ? '<div class="product-meta-row"><span class="product-rating"><span class="rating-star">★</span> '
+            . e(number_format($rating, 1))
+            . ($ratingCount > 0 ? ' <span class="rating-count">(' . e(compact_count($ratingCount)) . ')</span>' : '')
+            . '</span></div>'
+        : '';
+
     $productUrl = site_url('product.php?slug=' . rawurlencode($slug));
     $buyUrl = site_url('go.php?id=' . $id);
     $placeholder = '<div class="product-placeholder" aria-hidden="true">'
@@ -868,7 +892,9 @@ function render_product_card(array $product): string
         . '<span class="platform-badge platform-' . e($platformClass) . '">' . e($platform) . '</span>'
         . '</a>'
         . '<div class="product-body">'
+        . $brandHtml
         . '<a class="product-title" href="' . e($productUrl) . '">' . e($title) . '</a>'
+        . $ratingHtml
         . '<div class="product-price-row"><span class="product-price">' . $priceHtml . '</span>' . $mrpHtml . '</div>'
         . '<a class="buy-button" href="' . e($buyUrl) . '" target="_blank" rel="nofollow sponsored noopener" aria-label="Buy ' . e($title) . ' now">'
         . '<span>Buy Now</span>'

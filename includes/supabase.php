@@ -214,7 +214,7 @@ function supabase_rpc(string $function, array $params = [], bool $service = fals
 }
 
 /**
- * @param array{q?:string,category?:string,platform?:string,offset?:int} $filters
+ * @param array{q?:string,category?:string,platform?:string,offset?:int,sort?:string,min_price?:float,max_price?:float,min_discount?:int,brand?:string,min_rating?:float} $filters
  * @return list<array<string,mixed>>
  */
 function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PER_PAGE): array
@@ -225,7 +225,17 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
 
     $limit = max(1, min(60, $limit));
     $offset = max(0, (int) ($filters['offset'] ?? 0));
-    $query = 'select=*&is_active=eq.true&order=created_at.desc&limit=' . $limit . '&offset=' . $offset;
+
+    $sort = (string) ($filters['sort'] ?? '');
+    $order = match ($sort) {
+        'price_asc'     => 'price.asc',
+        'price_desc'    => 'price.desc',
+        'discount_desc' => 'discount_percent.desc',
+        'rating_desc'   => 'rating.desc',
+        default         => 'created_at.desc',
+    };
+
+    $query = 'select=*&is_active=eq.true&order=' . $order . '&limit=' . $limit . '&offset=' . $offset;
 
     $category = trim((string) ($filters['category'] ?? ''));
     if ($category !== '' && in_array($category, PRODUCT_CATEGORIES, true)) {
@@ -240,7 +250,29 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         $pattern = rawurlencode('*' . $search . '*');
         $query .= '&or=(title.ilike.' . $pattern
             . ',category.ilike.' . $pattern
-            . ',source_platform.ilike.' . $pattern . ')';
+            . ',source_platform.ilike.' . $pattern
+            . ',brand.ilike.' . $pattern . ')';
+    }
+
+    $minPrice = (float) ($filters['min_price'] ?? 0);
+    if ($minPrice > 0) {
+        $query .= '&price=gte.' . rawurlencode((string) $minPrice);
+    }
+    $maxPrice = (float) ($filters['max_price'] ?? 0);
+    if ($maxPrice > 0) {
+        $query .= '&price=lte.' . rawurlencode((string) $maxPrice);
+    }
+    $minDiscount = (int) ($filters['min_discount'] ?? 0);
+    if ($minDiscount > 0) {
+        $query .= '&discount_percent=gte.' . max(1, min(99, $minDiscount));
+    }
+    $brand = trim((string) ($filters['brand'] ?? ''));
+    if ($brand !== '') {
+        $query .= '&brand=eq.' . rawurlencode($brand);
+    }
+    $minRating = (float) ($filters['min_rating'] ?? 0);
+    if ($minRating > 0) {
+        $query .= '&rating=gte.' . rawurlencode((string) $minRating);
     }
 
     $result = supabase_request('GET', supabase_table() . '?' . $query . storefront_exclusion_query());
@@ -248,6 +280,29 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         // Older PostgREST builds reject the grouped negation; fall back to the
         // unfiltered query and rely on the PHP-side blocklist below.
         $result = supabase_request('GET', supabase_table() . '?' . $query);
+    }
+    if (!$result['ok']) {
+        // Installations without the brand/rating columns yet: drop those
+        // filters so the storefront keeps working until database.sql is run.
+        $fallback = 'select=*&is_active=eq.true&order='
+            . ($order === 'rating.desc' ? 'created_at.desc' : $order)
+            . '&limit=' . $limit . '&offset=' . $offset;
+        if ($category !== '' && in_array($category, PRODUCT_CATEGORIES, true)) {
+            $fallback .= '&category=eq.' . rawurlencode($category);
+        }
+        if ($platform !== '') {
+            $fallback .= '&source_platform=eq.' . rawurlencode($platform);
+        }
+        if ($minPrice > 0) {
+            $fallback .= '&price=gte.' . rawurlencode((string) $minPrice);
+        }
+        if ($maxPrice > 0) {
+            $fallback .= '&price=lte.' . rawurlencode((string) $maxPrice);
+        }
+        if ($minDiscount > 0) {
+            $fallback .= '&discount_percent=gte.' . max(1, min(99, $minDiscount));
+        }
+        $result = supabase_request('GET', supabase_table() . '?' . $fallback);
     }
     if (!$result['ok']) {
         app_log('error', 'Storefront product fetch failed', [
@@ -260,6 +315,58 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
     return array_values(array_filter($rows, static function (array $product): bool {
         return !is_blocked_product($product);
     }));
+}
+
+/**
+ * Brands and price range for the storefront filter panel.
+ *
+ * @return array{brands:list<string>,price_min:float,price_max:float,has_rating:bool}
+ */
+function fetch_filter_facets(int $limit = 800): array
+{
+    $empty = ['brands' => [], 'price_min' => 0.0, 'price_max' => 0.0, 'has_rating' => false];
+    if (!supabase_is_configured()) {
+        return $empty;
+    }
+
+    $query = 'select=brand,price,rating&is_active=eq.true&order=created_at.desc&limit=' . max(1, min(2000, $limit));
+    $result = supabase_request('GET', supabase_table() . '?' . $query . storefront_exclusion_query());
+    if (!$result['ok']) {
+        $result = supabase_request('GET', supabase_table() . '?' . $query);
+    }
+    if (!$result['ok'] || !is_array($result['data'])) {
+        return $empty;
+    }
+
+    $brands = [];
+    $priceMin = 0.0;
+    $priceMax = 0.0;
+    $hasRating = false;
+    foreach ($result['data'] as $row) {
+        if (!is_array($row) || is_blocked_product($row)) {
+            continue;
+        }
+        $brand = trim((string) ($row['brand'] ?? ''));
+        if ($brand !== '') {
+            $brands[$brand] = ($brands[$brand] ?? 0) + 1;
+        }
+        $price = (float) ($row['price'] ?? 0);
+        if ($price > 0) {
+            $priceMin = $priceMin > 0 ? min($priceMin, $price) : $price;
+            $priceMax = max($priceMax, $price);
+        }
+        if ((float) ($row['rating'] ?? 0) >= 4) {
+            $hasRating = true;
+        }
+    }
+    arsort($brands);
+
+    return [
+        'brands'     => array_slice(array_keys($brands), 0, 40),
+        'price_min'  => $priceMin,
+        'price_max'  => $priceMax,
+        'has_rating' => $hasRating,
+    ];
 }
 
 /** @return array<string,mixed>|null */
