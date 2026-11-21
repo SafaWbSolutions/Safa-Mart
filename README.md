@@ -22,6 +22,9 @@ No cart, no checkout: **Buy Now** tracks the click in Supabase and redirects to 
 | `uploads/products/` | Local WebP image storage, organised as `YYYY/MM/` |
 | `automation/scraper.py` | Bulk feed scraper, affiliate converter, uploader, price/stock verifier |
 | `.github/workflows/sync_products.yml` | Cron sync every four hours |
+| `manifest.webmanifest`, `sw.js`, `offline.php` | PWA install, offline page and Web Push service worker |
+| `includes/push.php`, `api/push.php`, `api/alerts.php` | VAPID deal-alert backend (see `PWA-ALERTS.md`) |
+| `includes/semantic.php` | Local typo-tolerant semantic search index (see `AI-RECOMMENDATIONS.md`) |
 | `logs/` | Private application logs (web access denied) |
 
 ---

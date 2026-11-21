@@ -50,6 +50,7 @@ if ($meta === null) {
         <meta name="robots" content="noindex,follow">
         <title><?= e($pageTitle) ?></title>
         <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
+        <?php pwa_head_tags(); ?>
     </head>
     <body>
     <main class="site-container" style="padding:60px 0;text-align:center">
@@ -57,6 +58,7 @@ if ($meta === null) {
         <p>This collection does not exist.</p>
         <p><a class="filter-apply" href="<?= e(site_url('index.php')) ?>">Browse all deals</a></p>
     </main>
+    <?php render_pwa_widgets(); ?>
     </body>
     </html>
     <?php
@@ -145,6 +147,7 @@ $collectionSchema = seo_jsonld([
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
+    <?php pwa_head_tags(); ?>
     <script src="<?= e(asset_url('assets/js/app.js')) ?>" defer></script>
     <?= seo_site_schema() ?>
     <?= $collectionSchema ?>
@@ -271,6 +274,7 @@ $collectionSchema = seo_jsonld([
 </main>
 
 <?php render_site_footer(); ?>
+<?php render_pwa_widgets(); ?>
 <?php require __DIR__ . '/includes/telegram_button.php'; ?>
 <?php require __DIR__ . '/includes/telegram_popup.php'; ?>
 </body>

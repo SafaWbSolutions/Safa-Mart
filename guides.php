@@ -52,6 +52,7 @@ $itemList = seo_jsonld([
     <meta name="twitter:card" content="summary">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
+    <?php pwa_head_tags(); ?>
     <script src="<?= e(asset_url('assets/js/app.js')) ?>" defer></script>
     <?= seo_site_schema() ?>
     <?= $itemList ?>

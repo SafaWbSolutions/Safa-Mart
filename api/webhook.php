@@ -67,6 +67,9 @@ if ($command === '/start' || $command === '/help') {
         . "/unhighlight &lt;slug|id&gt; – remove a spotlight\n"
         . "/highlights – list current spotlights\n"
         . "/indexnow – ping Bing/Yandex for instant indexing\n"
+        . "/pushstats – how many devices have deal alerts on\n"
+        . "/pushtest – send one test alert to up to 25 devices\n"
+        . "/push – broadcast a deal alert to every subscriber\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
     json_response(['ok' => true, 'command' => $command]);
@@ -455,6 +458,45 @@ if ($command === '/indexnow') {
     );
     json_response(['ok' => true, 'command' => '/indexnow', 'ping' => $ping]);
 }
+if ($command === '/pushstats') {
+    $stats = push_stats();
+    $last = $stats['last_sent'] > 0
+        ? date('d M Y, g:i A', $stats['last_sent'])
+        : 'never';
+    telegram_send_message(
+        $chatId,
+        "🔔 <b>Deal alert subscribers</b>\n"
+        . '• Devices: ' . (int) $stats['total'] . "\n"
+        . '• Active: ' . (int) $stats['active'] . "\n"
+        . '• Failing: ' . (int) $stats['failed'] . "\n"
+        . '• Last delivered: ' . telegram_escape($last)
+    );
+    json_response(['ok' => true, 'command' => '/pushstats', 'stats' => $stats]);
+}
+if ($command === '/pushtest' || $command === '/push') {
+    if (!push_is_configured()) {
+        telegram_send_message($chatId, '❌ Push keys could not be created. Check that the storage folder is writable.');
+        json_response(['ok' => true, 'command' => $command, 'error' => 'not configured']);
+    }
+    $stats = push_stats();
+    if ($stats['total'] < 1) {
+        telegram_send_message($chatId, 'No subscribed devices yet. Share the site and ask visitors to tap the 🔔 bell.');
+        json_response(['ok' => true, 'command' => $command, 'error' => 'no subscribers']);
+    }
+    $limit = $command === '/pushtest' ? 25 : 0;
+    telegram_send_message($chatId, '🔔 Sending ' . ($limit > 0 ? 'a test alert' : 'an alert') . ' to ' . (int) $stats['active'] . ' device(s)…');
+    $sent = push_broadcast('', $limit);
+    telegram_send_message(
+        $chatId,
+        '✅ <b>Push finished</b>' . "\n"
+        . '• Delivered: ' . (int) $sent['sent'] . "\n"
+        . '• Failed: ' . (int) $sent['failed'] . "\n"
+        . '• Removed (expired): ' . (int) $sent['removed'] . "\n"
+        . ($sent['skipped'] > 0 ? '• Skipped: ' . (int) $sent['skipped'] . "\n" : '')
+        . ($command === '/pushtest' ? 'Test limited to 25 devices.' : '')
+    );
+    json_response(['ok' => true, 'command' => $command, 'push' => $sent]);
+}
 if ($command === '/id') {
     $userId = (string) ($message['from']['id'] ?? 'unknown');
     telegram_send_message($chatId, "Chat ID: <code>" . telegram_escape($chatId) . "</code>\nUser ID: <code>" . telegram_escape($userId) . '</code>');
@@ -560,6 +602,7 @@ $listed = 0;
 $failed = 0;
 $seen = [];
 $listedUrls = [];
+$pushProducts = [];
 
 foreach ($urls as $url) {
     if (microtime(true) >= $deadline) {
@@ -701,6 +744,13 @@ foreach ($urls as $url) {
 
         $listed++;
         $listedUrls[] = site_url('product.php?slug=' . rawurlencode($slug));
+        $pushProducts[] = [
+            'slug'             => $slug,
+            'title'            => (string) $payload['title'],
+            'category'         => $category,
+            'discount_percent' => (int) $payload['discount_percent'],
+            'price'            => $price,
+        ];
         try {
             record_price_history($slug, $price, $mrp > 0 ? $mrp : $price);
         } catch (Throwable $historyError) {
@@ -755,6 +805,27 @@ if ($timedOut) {
 }
 if (count($urls) > 1 || $timedOut) {
     telegram_send_message($chatId, $summary);
+}
+
+// Deal alerts are sent after the webhook response, so Telegram never waits
+// (and never retries) because of a slow push service.
+if ($pushProducts && PUSH_AUTO_ANNOUNCE) {
+    register_shutdown_function(static function () use ($pushProducts): void {
+        while (ob_get_level() > 0) {
+            @ob_end_flush();
+        }
+        @flush();
+        if (function_exists('fastcgi_finish_request')) {
+            @fastcgi_finish_request();
+        }
+        ignore_user_abort(true);
+        @set_time_limit(60);
+        try {
+            push_announce_new_products($pushProducts);
+        } catch (Throwable $pushError) {
+            app_log('info', 'Deal alert broadcast skipped', ['error' => $pushError->getMessage()]);
+        }
+    });
 }
 
 json_response(['ok' => true, 'listed' => $listed, 'failed' => $failed]);

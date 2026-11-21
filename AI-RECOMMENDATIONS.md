@@ -127,6 +127,30 @@ Catalogue me sirf "kurta", "palazzo", "dupatta" hai
 
 ---
 
+## 5b. Semantic search (typo-tolerant, no API)
+
+Keyword search (`ILIKE`) "sneeker", "jeens" ya "kurti" jaise spelling par
+fail ho jati hai. `includes/semantic.php` iske liye ek chhota local search
+engine chalata hai:
+
+- Har product title + category + brand ko TF-IDF weighted bag-of-words +
+  character trigrams me convert karke `storage/semantic-index.json` me rakha
+  jata hai (≈120 KB, 2 ghante me ya naye product par rebuild).
+- Query ka cosine similarity se match hota hai, aur last word (product type)
+  ko extra weight milta hai — isliye "formal shooes" me shirt nahi, shoes
+  upar aate hain.
+- **Absolute cut:** agar best score hi kam ho (matlab catalogue me wo cheez
+  nahi hai, jaise "saree" ya "headfone") to semantic search kuch return nahi
+  karti. Grid me unrelated shirts nahi ghusenge.
+- Ye sirf tab chalta hai jab normal search se **page bhar na paye** — keyword
+  results hamesha pehle rehte hain.
+
+Koi API key, koi network call, koi extra cost nahi. Rebuild khud hota hai;
+zaroorat pade to `storage/semantic-index.json` delete kar dena, agli search par
+ban jayega.
+
+---
+
 ## 6. Config knobs
 
 | Setting | File | Default |

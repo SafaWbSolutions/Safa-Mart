@@ -70,6 +70,8 @@ function render_site_footer(): void
                 <a href="<?= e(site_url('sitemap.xml')) ?>">Sitemap</a>
                 <span aria-hidden="true">·</span>
                 <a href="<?= e(site_url('feed.xml')) ?>">Deal feed</a>
+                <span aria-hidden="true">·</span>
+                <button type="button" class="footer-install" data-safa-install>Install app</button>
             </span>
             <div class="made-by-credit">
                 <span class="indian-flag" role="img" aria-label="Indian flag" title="India">

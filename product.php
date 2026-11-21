@@ -365,6 +365,7 @@ $faqSchema = [
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/product-v2.css')) ?>">
+    <?php pwa_head_tags(); ?>
     <script>
         window.SAFA_CONFIG = <?= json_encode([
             'supabaseUrl' => SUPABASE_URL,
@@ -809,6 +810,7 @@ $faqSchema = [
 <?php render_site_footer(); ?>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<?php render_pwa_widgets(); ?>
 <?php require __DIR__ . '/includes/telegram_button.php'; ?>
 <?php require __DIR__ . '/includes/telegram_popup.php'; ?>
 </body>
@@ -829,6 +831,7 @@ function render_product_not_found(): void
         <title><?= e($title) ?></title>
         <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
         <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
+        <?php pwa_head_tags(); ?>
     </head>
     <body class="not-found-page">
     <main class="not-found-card">
@@ -847,6 +850,7 @@ function render_product_not_found(): void
         </div>
     </main>
     <?php render_site_footer(); ?>
+    <?php render_pwa_widgets(); ?>
     </body>
     </html>
     <?php

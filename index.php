@@ -59,6 +59,24 @@ if ($searchQuery !== '' && count($products) < 6) {
         $products = fetch_storefront_products($filters, PRODUCTS_PER_PAGE);
     }
 }
+
+// Semantic fill: typos and word variants ("kurti", "sneeker") that SQL ILIKE
+// cannot catch. Keyword results stay first; vectors only fill the empty slots.
+if ($searchQuery !== '' && count($products) < PRODUCTS_PER_PAGE) {
+    $seenIds = [];
+    foreach ($products as $seenProduct) {
+        $seenIds[] = (int) ($seenProduct['id'] ?? 0);
+    }
+    $semanticRows = semantic_search_products(
+        $searchQuery,
+        PRODUCTS_PER_PAGE - count($products),
+        $seenIds
+    );
+    if ($semanticRows) {
+        $products = array_merge($products, $semanticRows);
+    }
+}
+
 $facets = fetch_filter_facets();
 $hasMore = count($products) >= PRODUCTS_PER_PAGE;
 $hasFilters = $searchQuery !== '' || $category !== '' || $platform !== ''
@@ -230,6 +248,7 @@ if (SUPABASE_URL !== '') {
     </script>
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
+    <?php pwa_head_tags(); ?>
     <script>
         window.SAFA_CONFIG = <?= json_encode([
             'supabaseUrl' => SUPABASE_URL,
@@ -731,8 +750,7 @@ if (SUPABASE_URL !== '') {
 <?php render_site_footer(); ?>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<?php render_pwa_widgets(); ?>
 <?php require __DIR__ . '/includes/telegram_button.php'; ?>
 <?php require __DIR__ . '/includes/telegram_popup.php'; ?>
 </body>

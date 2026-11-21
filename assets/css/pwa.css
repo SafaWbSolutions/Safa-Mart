@@ -1,0 +1,333 @@
+/* Safa Mart — PWA install + deal alerts */
+.safa-pwa {
+    position: fixed;
+    right: 20px;
+    bottom: 86px;
+    z-index: 72;
+    font-family: inherit;
+    color: #1f2937;
+}
+
+.safa-bell {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, .55);
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff6aa2, #e91e63 55%, #b3124b);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 12px 26px rgba(233, 30, 99, .38), 0 2px 6px rgba(17, 24, 39, .18);
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.safa-bell:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 16px 32px rgba(233, 30, 99, .45), 0 3px 8px rgba(17, 24, 39, .2);
+}
+
+.safa-bell:focus-visible,
+.safa-pwa button:focus-visible {
+    outline: 3px solid #ffd166;
+    outline-offset: 2px;
+}
+
+.safa-bell.is-on {
+    background: linear-gradient(135deg, #34d399, #059669 60%, #047857);
+    box-shadow: 0 12px 26px rgba(5, 150, 105, .34), 0 2px 6px rgba(17, 24, 39, .18);
+}
+
+.safa-bell-dot {
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #fbbf24;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, .65);
+    animation: safaBellPulse 2.4s infinite;
+}
+
+.safa-bell-dot[hidden] { display: none; }
+
+@keyframes safaBellPulse {
+    0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, .65); }
+    70% { box-shadow: 0 0 0 9px rgba(251, 191, 36, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+}
+
+.safa-pwa-panel {
+    position: absolute;
+    right: 0;
+    bottom: 62px;
+    width: min(342px, calc(100vw - 32px));
+    padding: 18px 18px 15px;
+    border-radius: 20px;
+    background: #fff;
+    border: 1px solid #fbd5e3;
+    box-shadow: 0 26px 60px rgba(136, 22, 65, .24), 0 4px 12px rgba(17, 24, 39, .08);
+    animation: safaPanelIn .18s ease-out;
+    max-height: min(76vh, 620px);
+    overflow-y: auto;
+}
+
+.safa-pwa-panel[hidden] { display: none; }
+
+@keyframes safaPanelIn {
+    from { opacity: 0; transform: translateY(8px) scale(.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.safa-pwa-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.safa-pwa-eyebrow {
+    display: inline-block;
+    font-size: 9.5px;
+    font-weight: 850;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #be185d;
+}
+
+.safa-pwa-title {
+    margin: 2px 0 0;
+    font-size: 1.09rem;
+    line-height: 1.2;
+    letter-spacing: -.02em;
+    color: #111827;
+}
+
+.safa-pwa-close {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: #f8f1f4;
+    color: #6b7280;
+    cursor: pointer;
+}
+
+.safa-pwa-close:hover { background: #ffe4ed; color: #9d174d; }
+
+.safa-pwa-copy {
+    margin: 8px 0 10px;
+    font-size: .82rem;
+    line-height: 1.55;
+    color: #6b7280;
+}
+
+.safa-pwa-status {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #fff7fa;
+    border: 1px solid #fbd5e3;
+    font-size: .78rem;
+    font-weight: 650;
+    line-height: 1.45;
+    color: #9d174d;
+}
+
+.safa-pwa-status.is-ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.safa-pwa-status.is-warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+
+.safa-pwa-topics { margin-bottom: 13px; }
+
+.safa-pwa-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: .72rem;
+    font-weight: 750;
+    color: #4b5563;
+}
+
+.safa-pwa-label em { font-style: normal; font-weight: 500; color: #9ca3af; }
+
+.safa-pwa-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.safa-pwa-chip {
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    font-size: .72rem;
+    font-weight: 700;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all .14s ease;
+}
+
+.safa-pwa-chip:hover { border-color: #f9a8c4; color: #be185d; }
+
+.safa-pwa-chip[aria-pressed="true"] {
+    background: #fce7f3;
+    border-color: #f472b6;
+    color: #9d174d;
+}
+
+.safa-pwa-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.safa-pwa-primary,
+.safa-pwa-secondary,
+.safa-pwa-install-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border: 0;
+    border-radius: 11px;
+    font-size: .82rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform .14s ease, box-shadow .14s ease, background .14s ease;
+}
+
+.safa-pwa-primary {
+    flex: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #ff4d8d, #e91e63 60%, #c2185b);
+    box-shadow: 0 8px 18px rgba(233, 30, 99, .28);
+}
+
+.safa-pwa-primary:hover { transform: translateY(-1px); box-shadow: 0 11px 22px rgba(233, 30, 99, .34); }
+.safa-pwa-primary[disabled] { opacity: .55; cursor: not-allowed; box-shadow: none; transform: none; }
+
+.safa-pwa-secondary {
+    background: #f8f1f4;
+    color: #9d174d;
+    border: 1px solid #fbd5e3;
+}
+
+.safa-pwa-secondary:hover { background: #ffe4ed; }
+.safa-pwa-secondary[hidden] { display: none; }
+
+.safa-pwa-install {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #eef2ff, #fdf2f8);
+    border: 1px solid #e0e7ff;
+    margin-bottom: 8px;
+}
+
+.safa-pwa-install[hidden] { display: none; }
+
+.safa-pwa-install-btn {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    color: #fff;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    box-shadow: 0 6px 14px rgba(79, 70, 229, .26);
+}
+
+.safa-pwa-install-btn:hover { transform: translateY(-1px); }
+.safa-pwa-install small { font-size: .68rem; line-height: 1.35; color: #4b5563; }
+
+.safa-pwa-disable {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 8px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #9ca3af;
+    font-size: .75rem;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.safa-pwa-disable:hover { color: #be123c; }
+.safa-pwa-disable[hidden] { display: none; }
+
+.safa-pwa-ios {
+    margin: 0 0 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    font-size: .74rem;
+    line-height: 1.5;
+    color: #1d4ed8;
+}
+
+.safa-pwa-ios[hidden] { display: none; }
+
+.safa-pwa-note {
+    margin: 4px 0 0;
+    font-size: .68rem;
+    line-height: 1.5;
+    color: #9ca3af;
+}
+
+.safa-pwa-note a { color: #be185d; font-weight: 700; text-decoration: none; }
+.safa-pwa-note a:hover { text-decoration: underline; }
+
+/* Footer install action (same panel, one tap). */
+.footer-install {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.footer-install:hover { color: #fff; }
+
+@media (max-width: 720px) {
+    .safa-pwa { right: 14px; bottom: 74px; }
+    .safa-bell { width: 44px; height: 44px; }
+    .safa-pwa-panel {
+        right: 0;
+        bottom: 56px;
+        width: min(330px, calc(100vw - 28px));
+        padding: 16px 15px 13px;
+    }
+    .product-page .safa-pwa { bottom: 144px; }
+}
+
+@media (max-width: 380px) {
+    .safa-pwa { right: 10px; }
+    .safa-pwa-panel { width: calc(100vw - 20px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .safa-bell,
+    .safa-bell-dot,
+    .safa-pwa-panel {
+        animation: none !important;
+        transition: none !important;
+    }
+}

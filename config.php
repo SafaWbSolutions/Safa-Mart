@@ -211,6 +211,17 @@ safa_define('OPENROUTER_MODEL', trim((string) safa_config_value('OPENROUTER_MODE
 safa_define('AI_RECOMMENDATIONS', safa_bool(safa_config_value('AI_RECOMMENDATIONS', true)));
 safa_define('AI_QUERY_EXPANSION', safa_bool(safa_config_value('AI_QUERY_EXPANSION', true)));
 
+// ---------------------------------------------------------------------------
+// PWA + Web Push
+// ---------------------------------------------------------------------------
+// VAPID keys are generated automatically in /storage on first use.
+// Optional contact (mailto: or https URL) sent to push services.
+safa_define('PUSH_CONTACT', trim((string) safa_config_value('PUSH_CONTACT', '')));
+// How many subscribers one broadcast may contact before stopping.
+safa_define('PUSH_MAX_PER_RUN', max(10, min(1000, (int) safa_config_value('PUSH_MAX_PER_RUN', 150))));
+// Master switch for automatic "new deal" notifications after a Telegram listing.
+safa_define('PUSH_AUTO_ANNOUNCE', safa_bool(safa_config_value('PUSH_AUTO_ANNOUNCE', true)));
+
 
 /**
  * Stores that are permanently rejected: the Telegram bot never processes them
@@ -265,3 +276,6 @@ require_once __DIR__ . '/includes/events.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/ai.php';
 require_once __DIR__ . '/includes/recommend.php';
+require_once __DIR__ . '/includes/push.php';
+require_once __DIR__ . '/includes/pwa.php';
+require_once __DIR__ . '/includes/semantic.php';

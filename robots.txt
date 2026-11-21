@@ -4,6 +4,7 @@ Allow: /
 # Internal endpoints and tooling
 Disallow: /api/
 Disallow: /automation/
+Disallow: /storage/
 Disallow: /go.php
 
 # Filtered and search result URLs

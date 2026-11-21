@@ -1,0 +1,8 @@
+# Runtime secrets stay on the server.
+vapid.json
+push-subscriptions.json
+push.lock
+push-last-burst.txt
+push-last-burst.json
+semantic-index.json
+*.tmp

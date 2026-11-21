@@ -6,7 +6,7 @@ AddDefaultCharset UTF-8
 <IfModule mod_rewrite.c>
     RewriteEngine On
     # Never expose automation scripts, logs or repository metadata.
-    RewriteRule ^(automation|logs|\.github|\.git)(/|$) - [F,L,NC]
+    RewriteRule ^(automation|logs|storage|\.github|\.git)(/|$) - [F,L,NC]
 
     # SEO entry points and clean landing URLs.
     RewriteRule ^sitemap\.xml$ sitemap.php [L]
@@ -24,6 +24,10 @@ AddDefaultCharset UTF-8
 <FilesMatch "^(config\.php|config\.local\.php|config\.local\.example\.php|config\.seo\.php|database\.sql|README\.md|SPOTLIGHT-ADS-GUIDE\.md|SEO-PLAYBOOK\.md|composer\.(json|lock)|\.gitignore)$">
     Require all denied
 </FilesMatch>
+
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
 
 <IfModule mod_expires.c>
     ExpiresActive On
@@ -45,5 +49,13 @@ AddDefaultCharset UTF-8
     # Telegram and the upload endpoint must never be cached by a proxy.
     <FilesMatch "^(webhook|upload|feed)\.php$">
         Header always set Cache-Control "no-store, max-age=0"
+    </FilesMatch>
+    # A service worker must be revalidated on every visit.
+    <FilesMatch "^sw\.js$">
+        Header always set Cache-Control "no-cache, max-age=0"
+        Header always set Service-Worker-Allowed "/"
+    </FilesMatch>
+    <FilesMatch "^manifest\.webmanifest$">
+        Header always set Cache-Control "public, max-age=86400"
     </FilesMatch>
 </IfModule>

@@ -1,0 +1,60 @@
+{
+  "id": "/",
+  "name": "Safa Mart — India's smart deal store",
+  "short_name": "Safa Mart",
+  "description": "Handpicked fashion, electronics, home and beauty deals from Flipkart, Myntra, Amazon, Ajio, Shopsy and DigiHaat — with real discounts and direct store links.",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "start_url": "/index.php?utm_source=pwa&utm_medium=app",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#fff7fa",
+  "theme_color": "#e91e63",
+  "categories": ["shopping", "lifestyle"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Biggest discounts",
+      "short_name": "Discounts",
+      "description": "Today's highest discount deals",
+      "url": "/index.php?sort=discount_desc",
+      "icons": [{ "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Price drops",
+      "short_name": "Drops",
+      "description": "Products whose price just fell",
+      "url": "/price-drops",
+      "icons": [{ "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Buying guides",
+      "short_name": "Guides",
+      "description": "What to buy at every budget",
+      "url": "/guides/",
+      "icons": [{ "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

@@ -54,6 +54,9 @@ function render_landing_footer(): void
     if (function_exists('render_site_footer')) {
         render_site_footer();
     }
+    if (function_exists('render_pwa_widgets')) {
+        render_pwa_widgets();
+    }
     require __DIR__ . '/telegram_button.php';
     require __DIR__ . '/telegram_popup.php';
 }
