@@ -163,18 +163,8 @@ function json_ld_offer(array $product): array
 function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): array
 {
     $candidates = [];
-    $imageKeys = [
-        'og:image:secure_url', 'og:image:url', 'og:image',
-        'twitter:image', 'twitter:image:src', 'image',
-    ];
-    foreach ($meta['__all'] ?? [] as $entry) {
-        if (is_array($entry) && isset($entry['key'], $entry['value'])
-            && in_array($entry['key'], $imageKeys, true)
-            && trim((string) $entry['value']) !== '') {
-            $candidates[] = trim((string) $entry['value']);
-        }
-    }
 
+    // JSON-LD product images are the most reliable product photos.
     if (isset($jsonProduct['image'])) {
         $image = $jsonProduct['image'];
         if (is_string($image)) {
@@ -194,6 +184,19 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): a
         }
     }
 
+    // OpenGraph / Twitter images as a fallback.
+    $imageKeys = [
+        'og:image:secure_url', 'og:image:url', 'og:image',
+        'twitter:image', 'twitter:image:src', 'image',
+    ];
+    foreach ($meta['__all'] ?? [] as $entry) {
+        if (is_array($entry) && isset($entry['key'], $entry['value'])
+            && in_array($entry['key'], $imageKeys, true)
+            && trim((string) $entry['value']) !== '') {
+            $candidates[] = trim((string) $entry['value']);
+        }
+    }
+
     $urls = [];
     foreach ($candidates as $candidate) {
         $candidate = html_entity_decode(trim((string) $candidate), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -202,6 +205,9 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): a
         }
         $resolved = resolve_url($baseUrl, $candidate);
         if (!preg_match('#^https?://#i', $resolved)) {
+            continue;
+        }
+        if (!is_probable_product_image($resolved)) {
             continue;
         }
         if (!in_array($resolved, $urls, true)) {

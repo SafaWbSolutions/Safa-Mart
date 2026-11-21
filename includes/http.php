@@ -400,9 +400,184 @@ function http_request_once(
     ];
 }
 
-function telegram_send_message($chatId, string $text): array
+/**
+ * Store domains we can scrape for product data.
+ *
+ * @return list<string>
+ */
+function merchant_domains(): array
 {
-    if (TELEGRAM_BOT_TOKEN === '') {
+    return [
+        'flipkart.com', 'fkrt.it', 'fkrt.co',
+        'myntra.com', 'myntr.it',
+        'ajio.com',
+        'amazon.in', 'amazon.com', 'amzn.in', 'amzn.to',
+        'snapdeal.com', 'tatacliq.com', 'nykaa.com', 'nykaafashion.com',
+        'croma.com', 'firstcry.com', 'lifestylestores.com', 'shoppersstop.com',
+        'bewakoof.com', 'decathlon.in', 'boat-lifestyle.com', 'mamaearth.in',
+        'wakefit.co', 'pepperfry.com', 'ikea.com', 'jiomart.com', 'bigbasket.com',
+    ];
+}
+
+function is_merchant_url(string $url): bool
+{
+    return detect_platform($url) !== 'Other';
+}
+
+/**
+ * Short-link domains that must be expanded even when they map to a known store,
+ * because the landing page is not the product page.
+ */
+function needs_url_resolution(string $url): bool
+{
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $host = preg_replace('/^www\./', '', rtrim($host, '.')) ?? '';
+    if ($host === '') {
+        return true;
+    }
+
+    $shorteners = [
+        'fkrt.it', 'fkrt.co', 'dl.flipkart.com', 'myntr.it', 'amzn.in', 'amzn.to',
+        'ekaro.in', 'earnkaro.com', 'bitli.in', 'cutt.ly', 'bit.ly', 'tinyurl.com',
+        'rb.gy', 'shorturl.at', 't.co', 'tiny.one', 'linktr.ee',
+    ];
+
+    return in_array($host, $shorteners, true);
+}
+
+/**
+ * Pull the best merchant product URL out of an intermediate page
+ * (affiliate landing pages, meta refreshes, JSON payloads).
+ */
+function find_merchant_url_in_html(string $html, string $baseUrl): string
+{
+    if (trim($html) === '') {
+        return '';
+    }
+
+    $decoded = str_replace(
+        ['\\/', '\\u002F', '\\u002f', '&amp;', '&#038;', '&#x26;'],
+        ['/', '/', '/', '&', '&', '&'],
+        $html
+    );
+    $decoded = html_entity_decode($decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    $domains = implode('|', array_map(static function (string $domain): string {
+        return str_replace('.', '\\.', $domain);
+    }, merchant_domains()));
+
+    if (!preg_match_all('~https?://[a-z0-9.\-]*(?:' . $domains . ')(?::\d+)?/[^\s"\'<>\\\\]*~i', $decoded, $matches)) {
+        return '';
+    }
+
+    $best = '';
+    $bestScore = -100;
+    foreach (array_unique($matches[0]) as $candidate) {
+        $candidate = rtrim(trim($candidate), ".,;:!?)]}'\"");
+        if (!preg_match('#^https?://#i', $candidate)) {
+            continue;
+        }
+        $path = strtolower((string) parse_url($candidate, PHP_URL_PATH));
+        $score = 0;
+        if (preg_match('#/(?:p|dp|pd|buy|product|gp/product)/#', $path)) {
+            $score += 4;
+        }
+        if (preg_match('/(?:-pd-|\/p\/|\/dp\/|itm)/', $path)) {
+            $score += 3;
+        }
+        if (substr_count($path, '/') >= 3) {
+            $score += 1;
+        }
+        if (preg_match('/(?:search|category|collection|sitemap|login|cart|help)/', $path)) {
+            $score -= 4;
+        }
+        if (strlen($candidate) > 60) {
+            $score += 1;
+        }
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $best = $candidate;
+        }
+    }
+
+    return $best;
+}
+
+/**
+ * Follow affiliate short links and JS/refresh redirects until a supported
+ * merchant product URL is reached.
+ */
+function resolve_merchant_url(string $url, int $maxHops = 4): string
+{
+    $current = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if ($current === '' || !preg_match('#^https?://#i', $current)) {
+        return $current;
+    }
+
+    for ($hop = 0; $hop < $maxHops; $hop++) {
+        if (is_merchant_url($current) && !needs_url_resolution($current)) {
+            return canonicalize_product_url($current);
+        }
+        if (!is_safe_remote_url($current)) {
+            return $current;
+        }
+
+        $response = http_request($current, [
+            'timeout'   => 12,
+            'max_bytes' => 2097152,
+            'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        ]);
+        if (!$response['ok']) {
+            return $current;
+        }
+
+        $effective = trim((string) ($response['effective_url'] ?? ''));
+        if ($effective !== '' && $effective !== $current && is_merchant_url($effective)) {
+            return canonicalize_product_url($effective);
+        }
+
+        $found = find_merchant_url_in_html((string) $response['body'], $effective !== '' ? $effective : $current);
+        if ($found !== '') {
+            return canonicalize_product_url($found);
+        }
+
+        if ($effective === '' || $effective === $current) {
+            break;
+        }
+        $current = $effective;
+    }
+
+    return $current;
+}
+
+/**
+ * Reject obvious logos, icons, sprites and placeholders when picking a product image.
+ */
+function is_probable_product_image(string $url): bool
+{
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return false;
+    }
+    $path = strtolower((string) ($parts['path'] ?? ''));
+    if ($path === '') {
+        return false;
+    }
+    if (preg_match('~(?:^|[/_.-])(?:logo|logos|sprite|sprites|placeholder|noimage|no-image|default-image|default_image|site-icon|favicon|banner)(?:[/_.-]|$)~i', $path)) {
+        return false;
+    }
+    if (preg_match('/\.(?:jpe?g|png|webp|avif|gif)$/i', $path)) {
+        return true;
+    }
+    if (preg_match('~(?:^|/)(?:image|images|img|media|medias|photo|photos|product|products)(?:/|$)~i', $path)) {
+        return true;
+    }
+    $query = strtolower((string) ($parts['query'] ?? ''));
+    return (bool) preg_match('/(?:image|img|photo|media)=/i', $query);
+}
+
+function telegram_send_message($chatId, string $text): array
+{    if (TELEGRAM_BOT_TOKEN === '') {
         return ['ok' => false, 'status' => 0, 'body' => '', 'headers' => [], 'content_type' => '', 'error' => 'Telegram token is not configured.'];
     }
 

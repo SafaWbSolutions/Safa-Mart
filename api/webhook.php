@@ -84,11 +84,45 @@ if (!supabase_is_configured(true)) {
     json_response(['ok' => true, 'ignored' => 'supabase not configured']);
 }
 
+$candidateUrls = [];
+
 preg_match_all('~https?://[^\s<>"\']+~i', $text, $urlMatches);
+foreach ($urlMatches[0] as $match) {
+    $candidateUrls[] = $match;
+}
+
+if (preg_match_all('~\[[^\]]*\]\((https?://[^)\s]+)\)~i', $text, $markdownMatches)) {
+    foreach ($markdownMatches[1] as $match) {
+        $candidateUrls[] = $match;
+    }
+}
+
+$entities = array_merge(
+    is_array($message['entities'] ?? null) ? $message['entities'] : [],
+    is_array($message['caption_entities'] ?? null) ? $message['caption_entities'] : []
+);
+foreach ($entities as $entity) {
+    if (!is_array($entity)) {
+        continue;
+    }
+    $type = (string) ($entity['type'] ?? '');
+    if ($type === 'text_link' && !empty($entity['url']) && is_string($entity['url'])) {
+        $candidateUrls[] = $entity['url'];
+    } elseif ($type === 'url' && isset($entity['offset'], $entity['length'])) {
+        $entityText = function_exists('mb_substr')
+            ? mb_substr($text, (int) $entity['offset'], (int) $entity['length'], 'UTF-8')
+            : substr($text, (int) $entity['offset'], (int) $entity['length']);
+        if (is_string($entityText) && $entityText !== '') {
+            $candidateUrls[] = $entityText;
+        }
+    }
+}
+
 $urls = [];
-foreach ($urlMatches[0] as $url) {
+foreach ($candidateUrls as $url) {
+    $url = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $url = rtrim($url, ".,;:!?)]}'\"");
-    if ($url !== '' && !in_array($url, $urls, true)) {
+    if ($url !== '' && preg_match('#^https?://#i', $url) && !in_array($url, $urls, true)) {
         $urls[] = $url;
     }
     if (count($urls) >= 2) {
@@ -121,13 +155,15 @@ foreach ($urls as $url) {
         }
         $seen[$canonicalUrl] = true;
 
-        $platform = detect_platform($canonicalUrl);
-        $affiliate = convert_to_affiliate($canonicalUrl, $platform);
-        $metadata = scrape_product_metadata($canonicalUrl);
-
-        if ($platform === 'Other' && ($metadata['platform'] ?? 'Other') !== 'Other') {
-            $platform = $metadata['platform'];
+        $productUrl = resolve_merchant_url($canonicalUrl);
+        $platform = detect_platform($productUrl);
+        if ($platform === 'Other') {
+            throw new RuntimeException('This is not a supported store product page. Send a direct product link, for example from Flipkart, Myntra, Ajio or Amazon.');
         }
+
+        $affiliate = convert_to_affiliate($productUrl, $platform);
+        $metadata = scrape_product_metadata($productUrl);
+
         if (($metadata['availability'] ?? 'unknown') === 'out_of_stock') {
             throw new RuntimeException('This product is out of stock on the merchant page.');
         }
@@ -151,7 +187,24 @@ foreach ($urls as $url) {
         }
 
         $slug = build_slug($metadataTitle);
-        $primaryImage = download_image_as_webp($images[0], $slug, 10);
+        $primaryImage = null;
+        foreach ($images as $candidateImage) {
+            try {
+                if (!is_safe_remote_url($candidateImage)) {
+                    continue;
+                }
+                $primaryImage = download_image_as_webp($candidateImage, $slug, 10);
+                break;
+            } catch (Throwable $imageError) {
+                app_log('info', 'Primary image candidate skipped', [
+                    'image' => $candidateImage,
+                    'error' => $imageError->getMessage(),
+                ]);
+            }
+        }
+        if ($primaryImage === null) {
+            throw new RuntimeException('The product image could not be downloaded from the merchant page.');
+        }
         $gallery = [$primaryImage['url']];
         foreach (array_slice($images, 1, 2) as $extraImage) {
             try {
@@ -184,7 +237,7 @@ foreach ($urls as $url) {
             'thumbnail_url'    => $primaryImage['url'],
             'gallery_urls'     => $gallery,
             'affiliate_url'    => $affiliate['url'],
-            'original_url'     => $canonicalUrl,
+            'original_url'     => $productUrl,
             'is_active'        => true,
             'last_checked_at'  => gmdate('c'),
             'last_synced_at'   => gmdate('c'),
