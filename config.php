@@ -18,8 +18,19 @@ if (is_file($safaLocalConfigFile)) {
         $safaLocalConfig = $safaLoadedConfig;
     }
 }
+
+// Optional public settings file (safe to commit): verification tags, GA4, ads.
+// config.local.php still wins when both define the same key.
+$safaSeoConfigFile = __DIR__ . '/config.seo.php';
+if (is_file($safaSeoConfigFile)) {
+    $safaSeoConfig = require $safaSeoConfigFile;
+    if (is_array($safaSeoConfig)) {
+        $safaLocalConfig = array_merge($safaSeoConfig, $safaLocalConfig);
+    }
+}
+
 $GLOBALS['SAFA_LOCAL_CONFIG'] = $safaLocalConfig;
-unset($safaLocalConfigFile, $safaLoadedConfig);
+unset($safaLocalConfigFile, $safaLoadedConfig, $safaSeoConfigFile, $safaSeoConfig);
 
 /**
  * Read a configuration value without ever returning an empty string.

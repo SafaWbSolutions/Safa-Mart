@@ -53,20 +53,22 @@ ranking ke liye aage kya karna hai.
    ```html
    <meta name="google-site-verification" content="ABC123..." />
    ```
-3. Sirf `content` value copy karo aur Hostinger ke `config.local.php` me daalo:
+3. Sirf `content` value copy karo aur repo ki **`config.seo.php`** file me daalo:
    ```php
    'GOOGLE_SITE_VERIFICATION' => 'ABC123...',
    ```
+   Ye file committed hai, isliye GitHub par edit + commit karte hi Hostinger
+   auto-deploy ho jayegi. `config.local.php` chhedne ki zaroorat nahi.
 4. Site reload karo, phir Search Console me **Verify** dabao.
 5. **Sitemaps** → `sitemap.xml` submit karo.
 6. **URL Inspection** → homepage URL daal ke **Request indexing**.
 
-> Bing ke liye <https://www.bing.com/webmasters> par same tarika, config me
-> `'BING_SITE_VERIFICATION' => '...'`.
+> Bing ke liye <https://www.bing.com/webmasters> par same tarika, config.seo.php
+> me `'BING_SITE_VERIFICATION' => '...'`.
 
 ### GA4 (traffic dekhne ke liye, optional)
 1. <https://analytics.google.com> → property banao → Web stream.
-2. Measurement ID (`G-XXXXXXXXXX`) `config.local.php` me:
+2. Measurement ID (`G-XXXXXXXXXX`) `config.seo.php` me:
    ```php
    'GOOGLE_ANALYTICS_ID' => 'G-XXXXXXXXXX',
    ```

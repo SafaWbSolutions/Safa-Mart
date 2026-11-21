@@ -16,7 +16,7 @@ AddDefaultCharset UTF-8
 </IfModule>
 
 # Block direct HTTP access to configuration and schema files.
-<FilesMatch "^(config\.php|config\.local\.php|config\.local\.example\.php|database\.sql|README\.md|SPOTLIGHT-ADS-GUIDE\.md|SEO-PLAYBOOK\.md|composer\.(json|lock)|\.gitignore)$">
+<FilesMatch "^(config\.php|config\.local\.php|config\.local\.example\.php|config\.seo\.php|database\.sql|README\.md|SPOTLIGHT-ADS-GUIDE\.md|SEO-PLAYBOOK\.md|composer\.(json|lock)|\.gitignore)$">
     Require all denied
 </FilesMatch>
 
