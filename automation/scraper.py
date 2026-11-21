@@ -55,6 +55,7 @@ USER_AGENT = os.getenv(
 PLATFORM_DOMAINS = {
     "flipkart.com": "Flipkart",
     "shopsy.in": "Shopsy",
+    "digihaat.in": "DigiHaat",
     "fkrt.it": "Flipkart",
     "fkrt.co": "Flipkart",
     "myntra.com": "Myntra",
@@ -84,7 +85,7 @@ PLATFORM_DOMAINS = {
 }
 
 EARNKARO_PLATFORMS = {
-    "Flipkart", "Shopsy", "Myntra", "Ajio", "Amazon", "Snapdeal", "Tata CLiQ", "Nykaa",
+    "Flipkart", "Shopsy", "DigiHaat", "Myntra", "Ajio", "Amazon", "Snapdeal", "Tata CLiQ", "Nykaa",
     "Nykaa Fashion", "Croma", "FirstCry", "Lifestyle", "Shoppers Stop",
     "Bewakoof", "Decathlon", "boAt", "Mamaearth", "Wakefit", "Pepperfry",
     "IKEA", "JioMart", "BigBasket",

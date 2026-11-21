@@ -104,6 +104,7 @@ safa_define('EARNKARO_TIMEOUT', max(3, min(15, (int) safa_config_value('EARNKARO
 safa_define('EARNKARO_PLATFORMS', [
     'Flipkart',
     'Shopsy',
+    'DigiHaat',
     'Myntra',
     'Ajio',
     'Amazon',

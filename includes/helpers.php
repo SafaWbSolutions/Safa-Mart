@@ -294,6 +294,7 @@ function detect_platform(string $url): string
     $map = [
         'flipkart.com'        => 'Flipkart',
         'shopsy.in'           => 'Shopsy',
+        'digihaat.in'         => 'DigiHaat',
         'fkrt.it'             => 'Flipkart',
         'fkrt.co'             => 'Flipkart',
         'myntra.com'          => 'Myntra',
@@ -624,6 +625,9 @@ function is_product_page_url(string $url): bool
         case 'Shopsy':
             // .../product-slug/p/itm1234abcd
             return (bool) preg_match('~/p/~', $path);
+        case 'DigiHaat':
+            // .../en/product/<slug>  (kabhi /en/product-details/... bhi hota hai)
+            return (bool) preg_match('~/product(?:/|-|$)~', $path);
         case 'Ajio':
             return (bool) preg_match('~/p/\d{5,}~', $path);
         case 'Amazon':
