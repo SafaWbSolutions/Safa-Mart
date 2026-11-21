@@ -60,9 +60,47 @@ if ($command === '/start' || $command === '/help') {
         . 'Send one or more product links (up to 2 per message). I will convert the affiliate link, download the image, optimise it to WebP and publish the product.' . "\n\n"
         . "Supported: Flipkart, Myntra, Ajio, Amazon and more.\n"
         . "Commands: /id – show this chat ID\n"
+        . "/debug <link> – explain why a link fails\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
     json_response(['ok' => true, 'command' => $command]);
+}
+if ($command === '/debug') {
+    $debugUrl = trim((string) preg_replace('~^/debug(@\S+)?\s*~i', '', $text));
+    if ($debugUrl === '' || !preg_match('#^https?://#i', $debugUrl)) {
+        telegram_send_message($chatId, 'Usage: <code>/debug https://example.com/link</code>');
+        json_response(['ok' => true, 'command' => '/debug']);
+    }
+
+    $lines = ['🔧 <b>Link resolution debug</b>'];
+    $lines[] = '• URL: ' . telegram_escape($debugUrl);
+    $lines[] = '• Safe URL: ' . (is_safe_remote_url($debugUrl) ? 'yes' : 'no');
+    $lines[] = '• Shortener: ' . (needs_url_resolution($debugUrl) ? 'yes' : 'no');
+
+    $probe = http_request($debugUrl, ['timeout' => 15, 'max_bytes' => 2097152]);
+    $lines[] = '• HTTP: ' . (int) $probe['status'] . ' · '
+        . ($probe['content_type'] !== '' ? telegram_escape($probe['content_type']) : 'no content-type')
+        . ' · ' . strlen((string) $probe['body']) . ' bytes';
+    if (!empty($probe['error'])) {
+        $lines[] = '• Error: ' . telegram_escape((string) $probe['error']);
+    }
+    if (!empty($probe['effective_url'])) {
+        $lines[] = '• Effective: ' . telegram_escape((string) $probe['effective_url']);
+    }
+    if (!empty($probe['headers']['location'])) {
+        $lines[] = '• Location header: ' . telegram_escape((string) $probe['headers']['location']);
+    }
+    $foundInBody = find_merchant_url_in_html((string) $probe['body'], (string) ($probe['effective_url'] ?? $debugUrl));
+    $lines[] = '• Found in page: ' . ($foundInBody !== '' ? telegram_escape($foundInBody) : 'none');
+    $foundInQuery = find_merchant_url_in_query($debugUrl);
+    $lines[] = '• Found in query: ' . ($foundInQuery !== '' ? telegram_escape($foundInQuery) : 'none');
+
+    $resolved = resolve_merchant_url($debugUrl);
+    $lines[] = '• Resolved: ' . telegram_escape($resolved);
+    $lines[] = '• Platform: ' . telegram_escape(detect_platform($resolved));
+
+    telegram_send_message($chatId, implode("\n", $lines));
+    json_response(['ok' => true, 'command' => '/debug']);
 }
 if ($command === '/id') {
     $userId = (string) ($message['from']['id'] ?? 'unknown');

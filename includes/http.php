@@ -440,6 +440,8 @@ function needs_url_resolution(string $url): bool
         'fkrt.it', 'fkrt.co', 'dl.flipkart.com', 'myntr.it', 'amzn.in', 'amzn.to',
         'ekaro.in', 'earnkaro.com', 'bitli.in', 'cutt.ly', 'bit.ly', 'tinyurl.com',
         'rb.gy', 'shorturl.at', 't.co', 'tiny.one', 'linktr.ee',
+        'ajjio.in', 'ajio.in', 'ajiio.in', 'ajio.co', 'myntr.in', 'flipk.art',
+        'earnkaro.in', 'earnkaro.co', 'ekaro.co',
     ];
 
     return in_array($host, $shorteners, true);
@@ -455,25 +457,44 @@ function find_merchant_url_in_html(string $html, string $baseUrl): string
         return '';
     }
 
-    $decoded = str_replace(
-        ['\\/', '\\u002F', '\\u002f', '&amp;', '&#038;', '&#x26;'],
-        ['/', '/', '/', '&', '&', '&'],
-        $html
-    );
-    $decoded = html_entity_decode($decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
     $domains = implode('|', array_map(static function (string $domain): string {
         return str_replace('.', '\\.', $domain);
     }, merchant_domains()));
 
-    if (!preg_match_all('~https?://[a-z0-9.\-]*(?:' . $domains . ')(?::\d+)?/[^\s"\'<>\\\\]*~i', $decoded, $matches)) {
+    $absolutePattern = '~https?://[a-z0-9.\-]*(?:' . $domains . ')(?::\d+)?/[^\s"\'<>\\\\]*~i';
+    $relativePattern = '~//[a-z0-9.\-]*(?:' . $domains . ')(?::\d+)?/[^\s"\'<>\\\\]*~i';
+
+    $views = [$html, urldecode($html), rawurldecode($html)];
+    $candidates = [];
+    foreach ($views as $view) {
+        $view = str_replace(
+            ['\\/', '\\u002F', '\\u002f', '&amp;', '&#038;', '&#x26;'],
+            ['/', '/', '/', '&', '&', '&'],
+            $view
+        );
+        $view = html_entity_decode($view, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        if (preg_match_all($absolutePattern, $view, $matches)) {
+            foreach ($matches[0] as $match) {
+                $candidates[] = $match;
+            }
+        }
+        if (preg_match_all($relativePattern, $view, $matches)) {
+            foreach ($matches[0] as $match) {
+                $candidates[] = 'https:' . $match;
+            }
+        }
+    }
+
+    $candidates = array_unique($candidates);
+    if (!$candidates) {
         return '';
     }
 
     $best = '';
     $bestScore = -100;
-    foreach (array_unique($matches[0]) as $candidate) {
-        $candidate = rtrim(trim($candidate), ".,;:!?)]}'\"");
+    foreach ($candidates as $candidate) {
+        $candidate = rtrim(trim((string) $candidate), ".,;:!?)]}'\"");
         if (!preg_match('#^https?://#i', $candidate)) {
             continue;
         }
@@ -504,6 +525,35 @@ function find_merchant_url_in_html(string $html, string $baseUrl): string
 }
 
 /**
+ * Try the redirect/deeplink values carried in a URL's own query string.
+ */
+function find_merchant_url_in_query(string $url): string
+{
+    $query = (string) parse_url($url, PHP_URL_QUERY);
+    if ($query === '') {
+        return '';
+    }
+
+    parse_str($query, $params);
+    $keys = ['url', 'u', 'r', 'redirect', 'redirect_url', 'target', 'to', 'dest', 'destination', 'link', 'deep_link', 'deeplink', 'dl'];
+    foreach ($keys as $key) {
+        if (empty($params[$key]) || !is_string($params[$key])) {
+            continue;
+        }
+        $candidate = resolve_url($url, trim($params[$key]));
+        if (is_merchant_url($candidate)) {
+            return canonicalize_product_url($candidate);
+        }
+        $found = find_merchant_url_in_html($candidate, $candidate);
+        if ($found !== '') {
+            return $found;
+        }
+    }
+
+    return '';
+}
+
+/**
  * Follow affiliate short links and JS/refresh redirects until a supported
  * merchant product URL is reached.
  */
@@ -518,6 +568,12 @@ function resolve_merchant_url(string $url, int $maxHops = 4): string
         if (is_merchant_url($current) && !needs_url_resolution($current)) {
             return canonicalize_product_url($current);
         }
+
+        $fromQuery = find_merchant_url_in_query($current);
+        if ($fromQuery !== '') {
+            return canonicalize_product_url($fromQuery);
+        }
+
         if (!is_safe_remote_url($current)) {
             return $current;
         }
@@ -527,13 +583,36 @@ function resolve_merchant_url(string $url, int $maxHops = 4): string
             'max_bytes' => 2097152,
             'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
         ]);
+
         if (!$response['ok']) {
+            $location = trim((string) ($response['headers']['location'] ?? ''));
+            if ($location !== '') {
+                $next = resolve_url($current, $location);
+                if (is_merchant_url($next)) {
+                    return canonicalize_product_url($next);
+                }
+                $found = find_merchant_url_in_html($location, $next);
+                if ($found !== '') {
+                    return canonicalize_product_url($found);
+                }
+                $fromQuery = find_merchant_url_in_query($next);
+                if ($fromQuery !== '') {
+                    return canonicalize_product_url($fromQuery);
+                }
+            }
             return $current;
         }
 
         $effective = trim((string) ($response['effective_url'] ?? ''));
         if ($effective !== '' && $effective !== $current && is_merchant_url($effective)) {
             return canonicalize_product_url($effective);
+        }
+
+        if ($effective !== '' && $effective !== $current) {
+            $fromQuery = find_merchant_url_in_query($effective);
+            if ($fromQuery !== '') {
+                return canonicalize_product_url($fromQuery);
+            }
         }
 
         $found = find_merchant_url_in_html((string) $response['body'], $effective !== '' ? $effective : $current);
