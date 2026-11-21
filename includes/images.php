@@ -116,7 +116,7 @@ function save_image_binary_as_webp(string $binary, string $slug): array
 /**
  * @return array{url:string,relative:string,path:string,width:int,height:int,bytes:int}
  */
-function download_image_as_webp(string $imageUrl, string $slug, int $timeout = HTTP_TIMEOUT): array
+function download_image_as_webp(string $imageUrl, string $slug, int $timeout = HTTP_TIMEOUT, string $referer = ''): array
 {
     if (!is_safe_remote_url($imageUrl)) {
         throw new RuntimeException('The image URL is invalid or non-public.');
@@ -126,6 +126,7 @@ function download_image_as_webp(string $imageUrl, string $slug, int $timeout = H
         'timeout'   => max(5, min(30, $timeout)),
         'max_bytes' => UPLOAD_MAX_BYTES,
         'accept'    => 'image/webp,image/jpeg,image/png,image/gif,image/*;q=0.8,*/*;q=0.5',
+        'referer'   => $referer !== '' ? $referer : origin_of_url($imageUrl),
     ]);
 
     if (!$response['ok'] || $response['status'] < 200 || $response['status'] >= 300) {

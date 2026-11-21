@@ -261,6 +261,114 @@ function extract_mrp_from_text(string $text): float
 }
 
 /**
+ * Ajio product pages answer HTTP 403 to non-browser clients, but the public
+ * search page embeds the full product grid (name, price, MRP, images).
+ */
+function scrape_ajio_search_fallback(string $url): array
+{
+    if (!preg_match('~/p/(\d{5,})~', $url, $codeMatch)) {
+        return [];
+    }
+    $code = $codeMatch[1];
+
+    $path = (string) parse_url($url, PHP_URL_PATH);
+    $slug = (string) preg_replace('~/p/.*$~', '', $path);
+    $query = trim((string) preg_replace('/[^a-z0-9]+/i', ' ', $slug));
+    $query = trim((string) preg_replace('/\s+/', ' ', $query));
+    if ($query === '') {
+        $query = $code;
+    }
+    $words = array_slice(explode(' ', $query), 0, 10);
+
+    $searchUrl = 'https://www.ajio.com/search/?text=' . rawurlencode(implode(' ', $words));
+    $response = http_request($searchUrl, [
+        'timeout'   => HTTP_TIMEOUT,
+        'max_bytes' => 6291456,
+        'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'referer'   => 'https://www.ajio.com/',
+    ]);
+    if (!$response['ok'] || (int) $response['status'] !== 200) {
+        return [];
+    }
+
+    $html = (string) $response['body'];
+    if (!preg_match('~"' . preg_quote($code, '~') . '\d{3}":\{~', $html, $match, PREG_OFFSET_CAPTURE)) {
+        return [];
+    }
+
+    $window = substr($html, (int) $match[0][1], 16000);
+
+    $price = 0.0;
+    if (preg_match('~"price":\{"currencyIso":"INR","formattedValue":"[^"]*","displayformattedValue":"[^"]*","value":([0-9.]+)\}~', $window, $priceMatch)) {
+        $price = (float) $priceMatch[1];
+    }
+    if ($price <= 0 && preg_match('~"offerPrice":\{[^}]*"value":([0-9.]+)~', $window, $offerMatch)) {
+        $price = (float) $offerMatch[1];
+    }
+
+    $mrp = 0.0;
+    if (preg_match('~"wasPriceData":\{[^}]*"value":([0-9.]+)~', $window, $mrpMatch)) {
+        $mrp = (float) $mrpMatch[1];
+    }
+    if ($mrp < $price) {
+        $mrp = $price;
+    }
+
+    $name = '';
+    if (preg_match('~"name":"([^"]+)"~', $window, $nameMatch)) {
+        $name = clean_text($nameMatch[1]);
+    }
+    $brand = '';
+    if (preg_match('~"brandName":"([^"]+)"~', $window, $brandMatch)) {
+        $brand = clean_text($brandMatch[1]);
+    }
+
+    $title = $name;
+    if ($brand !== '' && $name !== '' && stripos($name, $brand) === false) {
+        $title = $brand . ' ' . $name;
+    }
+    if ($title === '') {
+        return [];
+    }
+
+    $images = [];
+    if (preg_match('~"images":\[(.*?)\]~', $window, $imagesMatch)) {
+        if (preg_match_all('~"url":"(https://assets\.ajio\.com/[^"]+)"~i', $imagesMatch[1], $urlMatches)) {
+            foreach ($urlMatches[1] as $imageUrl) {
+                $imageUrl = str_replace('\\/', '/', $imageUrl);
+                if (!in_array($imageUrl, $images, true)) {
+                    $images[] = $imageUrl;
+                }
+            }
+        }
+    }
+    if (!$images) {
+        return [];
+    }
+
+    $categoryHint = '';
+    if (preg_match('~"brickNameText":"([^"]+)"~', $window, $categoryMatch)) {
+        $categoryHint = clean_text($categoryMatch[1]);
+    }
+
+    return [
+        'title'         => $title,
+        'description'   => '',
+        'image'         => $images[0] ?? null,
+        'images'        => array_slice($images, 0, 6),
+        'price'         => $price,
+        'mrp'           => $mrp,
+        'currency'      => 'INR',
+        'brand'         => $brand,
+        'category_hint' => $categoryHint,
+        'availability'  => 'unknown',
+        'platform'      => 'Ajio',
+        'canonical_url' => $url,
+        'effective_url' => $url,
+    ];
+}
+
+/**
  * Scrape OpenGraph and JSON-LD product data.
  *
  * @return array<string,mixed>
@@ -271,9 +379,17 @@ function scrape_product_metadata(string $url): array
         'timeout'   => HTTP_TIMEOUT,
         'max_bytes' => 4194304,
         'accept'    => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'referer'   => origin_of_url($url),
     ]);
 
     if (!$response['ok'] || $response['status'] < 200 || $response['status'] >= 400) {
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        if (str_contains($host, 'ajio.com')) {
+            $fallback = scrape_ajio_search_fallback($url);
+            if ($fallback) {
+                return $fallback;
+            }
+        }
         throw new RuntimeException('Could not load the product page (HTTP ' . $response['status'] . ').');
     }
 

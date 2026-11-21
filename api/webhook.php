@@ -231,7 +231,7 @@ foreach ($urls as $url) {
                 if (!is_safe_remote_url($candidateImage)) {
                     continue;
                 }
-                $primaryImage = download_image_as_webp($candidateImage, $slug, 10);
+                $primaryImage = download_image_as_webp($candidateImage, $slug, 10, origin_of_url($productUrl));
                 break;
             } catch (Throwable $imageError) {
                 app_log('info', 'Primary image candidate skipped', [
@@ -249,7 +249,7 @@ foreach ($urls as $url) {
                 if (!is_safe_remote_url($extraImage)) {
                     continue;
                 }
-                $saved = download_image_as_webp($extraImage, $slug, 6);
+                $saved = download_image_as_webp($extraImage, $slug, 6, origin_of_url($productUrl));
                 if (!in_array($saved['url'], $gallery, true)) {
                     $gallery[] = $saved['url'];
                 }

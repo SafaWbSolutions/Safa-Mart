@@ -172,6 +172,68 @@ function resolve_url(string $base, string $relative): string
 }
 
 /**
+ * Add the browser fingerprint headers that storefront WAFs (Akamai, PerimeterX)
+ * expect. Without them Ajio/Hamara style sites answer with HTTP 403.
+ *
+ * @param list<string> $headers
+ * @return list<string>
+ */
+function add_browser_fingerprint_headers(array $headers, bool $isImageRequest = false): array
+{
+    $present = [];
+    $userAgent = '';
+    foreach ($headers as $header) {
+        $header = (string) $header;
+        $separator = strpos($header, ':');
+        if ($separator === false) {
+            continue;
+        }
+        $name = strtolower(trim(substr($header, 0, $separator)));
+        $present[$name] = true;
+        if ($name === 'user-agent') {
+            $userAgent = trim(substr($header, $separator + 1));
+        }
+    }
+
+    $chromeMajor = '131';
+    if ($userAgent !== '' && preg_match('~Chrome/(\d+)\.~', $userAgent, $match)) {
+        $chromeMajor = $match[1];
+    }
+
+    $defaults = [
+        'accept-language'           => 'en-IN,en;q=0.9',
+        'sec-ch-ua'                 => '"Chromium";v="' . $chromeMajor . '", "Not_A Brand";v="24", "Google Chrome";v="' . $chromeMajor . '"',
+        'sec-ch-ua-mobile'          => '?0',
+        'sec-ch-ua-platform'        => '"Windows"',
+        'sec-fetch-dest'            => $isImageRequest ? 'image' : 'document',
+        'sec-fetch-mode'            => $isImageRequest ? 'no-cors' : 'navigate',
+        'sec-fetch-site'            => 'none',
+        'upgrade-insecure-requests' => '1',
+    ];
+
+    foreach ($defaults as $name => $value) {
+        if (!isset($present[$name])) {
+            $headers[] = $name . ': ' . $value;
+        }
+    }
+
+    return $headers;
+}
+
+function origin_of_url(string $url): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+        return '';
+    }
+    $origin = strtolower((string) $parts['scheme']) . '://' . $parts['host'];
+    if (!empty($parts['port'])) {
+        $origin .= ':' . (int) $parts['port'];
+    }
+    return $origin . '/';
+}
+
+/**
  * @param array<string,mixed> $options
  * @return array{ok:bool,status:int,body:string,headers:array<string,string>,content_type:string,error:string,effective_url?:string}
  */
@@ -219,13 +281,24 @@ function http_request(string $url, array $options = []): array
             $hasUserAgent = true;
         }
     }
+    $acceptValue = (string) ($options['accept'] ?? 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8');
     if (!$hasAccept) {
-        $headers[] = 'Accept: ' . (string) ($options['accept'] ?? 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8');
+        $headers[] = 'Accept: ' . $acceptValue;
     }
     if (!$hasUserAgent) {
         $headers[] = 'User-Agent: ' . (string) ($options['user_agent'] ?? USER_AGENT);
     }
-    $headers[] = 'Accept-Language: en-IN,en;q=0.9';
+
+    $isDocumentRequest = stripos($acceptValue, 'text/html') !== false || stripos($acceptValue, 'application/xhtml') !== false;
+    $isImageRequest = stripos($acceptValue, 'image/') !== false;
+    if ($isDocumentRequest || $isImageRequest) {
+        $headers = add_browser_fingerprint_headers($headers, $isImageRequest);
+    }
+
+    $referer = trim((string) ($options['referer'] ?? ''));
+    if ($referer !== '') {
+        $headers[] = 'Referer: ' . $referer;
+    }
 
     $timeout = max(3, min(30, (int) ($options['timeout'] ?? HTTP_TIMEOUT)));
     $maxBytes = max(1024, (int) ($options['max_bytes'] ?? 4194304));
@@ -318,6 +391,9 @@ function http_request_once(
         CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_HEADER         => false,
+        // Akamai-fronted stores (Ajio, Tata CLiQ) reject cURL's HTTP/2
+        // fingerprint with HTTP 403; HTTP/1.1 is served normally.
+        CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
     ];
     if (defined('CURLOPT_PROTOCOLS')) {
         $options[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
