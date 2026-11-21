@@ -1138,6 +1138,10 @@ def build_product_payload(
         raise ScrapeError("Could not detect the source platform.")
 
     affiliate_url = convert_affiliate(config, session, canonical, platform)
+    if not affiliate_url or affiliate_url == canonical:
+        # Storefront sirf affiliate products dikhata hai, isliye bina link wale
+        # product ko DB me daalne ka koi fayda nahi.
+        raise ScrapeError("EarnKaro did not create an affiliate link; product skipped.")
     slug = make_slug(metadata["title"])
 
     gallery: list[str] = []
