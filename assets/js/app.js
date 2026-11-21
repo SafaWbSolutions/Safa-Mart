@@ -674,7 +674,24 @@
             state.hasMore = data.length >= pageSize;
 
             if (state.loaded === 0) {
-                showEmpty('No deals found', 'Try a different search or clear the filters to see every deal.');
+                if (state.platform === 'Flipkart') {
+                    showEmpty(
+                        'Flipkart deals are on the way',
+                        'New Flipkart offers are being verified. Try Myntra, Shopsy or DigiHaat for live deals right now.'
+                    );
+                } else if (state.platform !== '') {
+                    showEmpty(
+                        state.platform + ' deals are on the way',
+                        'Try another store or category, or clear the filters to see every live deal.'
+                    );
+                } else if (state.category !== '') {
+                    showEmpty(
+                        'No ' + state.category + ' deals right now',
+                        'Try another category or clear the filters to see every live deal.'
+                    );
+                } else {
+                    showEmpty('No deals found', 'Try a different search or clear the filters to see every deal.');
+                }
             } else {
                 hideEmpty();
             }

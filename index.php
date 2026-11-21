@@ -693,8 +693,22 @@ if (SUPABASE_URL !== '') {
                     <circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>
                 </svg>
             </div>
-            <h3 id="emptyTitle"><?= count($products) === 0 ? 'No deals found here yet' : 'Nothing matches these filters' ?></h3>
-            <p id="emptyText">Try a different search or clear the filters to see all deals.</p>
+            <?php
+            $emptyTitle = 'No deals found here yet';
+            $emptyText = 'Try a different search or clear the filters to see all deals.';
+            if ($platform === 'Flipkart') {
+                $emptyTitle = 'Flipkart deals are on the way';
+                $emptyText = 'New Flipkart offers are being verified. Try Myntra, Shopsy or DigiHaat for live deals right now.';
+            } elseif ($platform !== '') {
+                $emptyTitle = $platform . ' deals are on the way';
+                $emptyText = 'Try another store or category, or clear the filters to see every live deal.';
+            } elseif ($category !== '') {
+                $emptyTitle = 'No ' . $category . ' deals right now';
+                $emptyText = 'Try another category or clear the filters to see every live deal.';
+            }
+            ?>
+            <h3 id="emptyTitle"><?= e($emptyTitle) ?></h3>
+            <p id="emptyText"><?= e($emptyText) ?></p>
             <button type="button" class="empty-action" data-clear-filters>Show all deals</button>
         </div>
 
