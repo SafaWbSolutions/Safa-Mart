@@ -701,6 +701,11 @@ foreach ($urls as $url) {
 
         $listed++;
         $listedUrls[] = site_url('product.php?slug=' . rawurlencode($slug));
+        try {
+            record_price_history($slug, $price, $mrp > 0 ? $mrp : $price);
+        } catch (Throwable $historyError) {
+            app_log('info', 'Price history skipped', ['error' => $historyError->getMessage()]);
+        }
         $priceLabel = $price > 0 ? '₹' . inr_plain($price) : 'Price on request';
         $confirmation = '✅ <b>Listed:</b> ' . telegram_escape(truncate_text($metadataTitle, 120))
             . ' - ' . telegram_escape($priceLabel) . "\n"

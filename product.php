@@ -195,6 +195,31 @@ foreach ($spareSpecs as $entry) {
 $lastCheckedLabel = $lastChecked !== '' ? $lastChecked : 'recently';
 
 $related = fetch_related_products($category, $id, 8);
+
+$priceHistory = fetch_price_history($slug, 40);
+$historyStats = null;
+if (count($priceHistory) >= 2) {
+    $prices = array_map(static function (array $row): float {
+        return (float) $row['price'];
+    }, $priceHistory);
+    $lowest = min($prices);
+    $highest = max($prices);
+    $lowestDate = '';
+    foreach ($priceHistory as $row) {
+        if ((float) $row['price'] === $lowest) {
+            $lowestDate = human_date($row['recorded_at'] ?? '');
+            break;
+        }
+    }
+    $historyStats = [
+        'count'       => count($priceHistory),
+        'lowest'      => $lowest,
+        'lowest_date' => $lowestDate,
+        'highest'     => $highest,
+        'current'     => (float) $priceHistory[0]['price'],
+    ];
+}
+
 $shareTitle = $title . ' at ' . ($price > 0 ? inr($price) : 'a great price') . ' on ' . APP_NAME;
 $whatsappUrl = 'https://wa.me/?text=' . rawurlencode($shareTitle . ' ' . $productUrl);
 $telegramUrl = 'https://t.me/share/url?url=' . rawurlencode($productUrl) . '&text=' . rawurlencode($shareTitle);
@@ -661,6 +686,35 @@ $faqSchema = [
             <div><span>Price checked</span><strong><?= e($lastChecked !== '' ? $lastChecked : 'Recently') ?></strong></div>
         </div>
     </section>
+
+    <?php if ($historyStats): ?>
+        <section class="product-history" aria-labelledby="historyHeading">
+            <div class="history-head">
+                <h2 id="historyHeading">Price history</h2>
+                <span class="history-count"><?= (int) $historyStats['count'] ?> price checks</span>
+            </div>
+            <div class="history-stats">
+                <div>
+                    <span>Lowest tracked</span>
+                    <strong class="history-low"><?= e(inr($historyStats['lowest'])) ?></strong>
+                    <?php if ($historyStats['lowest_date'] !== ''): ?>
+                        <small>on <?= e($historyStats['lowest_date']) ?></small>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <span>Highest tracked</span>
+                    <strong><?= e(inr($historyStats['highest'])) ?></strong>
+                    <small>previous checks</small>
+                </div>
+                <div>
+                    <span>Current price</span>
+                    <strong><?= e(inr($historyStats['current'])) ?></strong>
+                    <small>on <?= e($platform) ?></small>
+                </div>
+            </div>
+            <p class="history-note">Prices are recorded when Safa Mart refreshes this listing. Marketplace prices can change at any time — confirm on <?= e($platform) ?> before buying.</p>
+        </section>
+    <?php endif; ?>
 
     <?php if ($specs): ?>
         <section class="product-specs" aria-labelledby="specsHeading">

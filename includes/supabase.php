@@ -450,3 +450,144 @@ function fetch_related_products(string $category, int $excludeId, int $limit = 8
         return !is_blocked_product($product);
     }));
 }
+
+/* -------------------------------------------------------------------------
+ * Price history (optional table: see database.sql)
+ * ---------------------------------------------------------------------- */
+
+function price_history_available(): bool
+{
+    if (array_key_exists('SAFA_PRICE_HISTORY_AVAILABLE', $GLOBALS)) {
+        return (bool) $GLOBALS['SAFA_PRICE_HISTORY_AVAILABLE'];
+    }
+    $result = supabase_request('GET', 'price_history?select=slug&limit=1', null, ['service' => true, 'timeout' => 8]);
+    $GLOBALS['SAFA_PRICE_HISTORY_AVAILABLE'] = $result['ok'];
+    return (bool) $result['ok'];
+}
+
+function record_price_history(string $slug, float $price, float $mrp, int $productId = 0): bool
+{
+    $slug = strtolower(trim($slug));
+    if ($slug === '' || $price <= 0) {
+        return false;
+    }
+    $result = supabase_request('POST', 'price_history', [[
+        'product_id'  => max(0, $productId),
+        'slug'        => $slug,
+        'price'       => $price,
+        'mrp'         => max(0, $mrp),
+        'recorded_at' => gmdate('c'),
+    ]], ['service' => true, 'timeout' => 8, 'prefer' => 'return=minimal']);
+    return (bool) $result['ok'];
+}
+
+/**
+ * @return list<array{price:float,mrp:float,recorded_at:string}>
+ */
+function fetch_price_history(string $slug, int $limit = 30): array
+{
+    $slug = strtolower(trim($slug));
+    if ($slug === '' || !price_history_available()) {
+        return [];
+    }
+    $query = 'select=price,mrp,recorded_at&slug=eq.' . rawurlencode($slug)
+        . '&order=recorded_at.desc&limit=' . max(2, min(120, $limit));
+    $result = supabase_request('GET', 'price_history?' . $query, null, ['service' => true, 'timeout' => 10]);
+    if (!$result['ok'] || !is_array($result['data'])) {
+        return [];
+    }
+    return array_values(array_filter(array_map(static function ($row): array {
+        return [
+            'price'       => (float) ($row['price'] ?? 0),
+            'mrp'         => (float) ($row['mrp'] ?? 0),
+            'recorded_at' => (string) ($row['recorded_at'] ?? ''),
+        ];
+    }, $result['data']), static function (array $row): bool {
+        return $row['price'] > 0;
+    }));
+}
+
+/**
+ * Latest price change per product, biggest drops first.
+ *
+ * @return list<array{product:array<string,mixed>,drop:float,drop_percent:int,previous:float,current:float,recorded_at:string}>
+ */
+function fetch_recent_price_drops(int $limit = 16): array
+{
+    if (!price_history_available()) {
+        return [];
+    }
+    $query = 'select=slug,price,recorded_at&order=recorded_at.desc&limit=1500';
+    $result = supabase_request('GET', 'price_history?' . $query, null, ['service' => true, 'timeout' => 20]);
+    if (!$result['ok'] || !is_array($result['data'])) {
+        return [];
+    }
+
+    $bySlug = [];
+    foreach ($result['data'] as $row) {
+        $slug = strtolower((string) ($row['slug'] ?? ''));
+        if ($slug === '') {
+            continue;
+        }
+        if (!isset($bySlug[$slug])) {
+            $bySlug[$slug] = [];
+        }
+        if (count($bySlug[$slug]) >= 2) {
+            continue;
+        }
+        $bySlug[$slug][] = [
+            'price'       => (float) ($row['price'] ?? 0),
+            'recorded_at' => (string) ($row['recorded_at'] ?? ''),
+        ];
+    }
+
+    $drops = [];
+    foreach ($bySlug as $slug => $entries) {
+        if (count($entries) < 2) {
+            continue;
+        }
+        $current = $entries[0]['price'];
+        $previous = $entries[1]['price'];
+        if ($current <= 0 || $previous <= 0 || $current >= $previous - 0.5) {
+            continue;
+        }
+        $drop = $previous - $current;
+        $drops[] = [
+            'slug'         => $slug,
+            'drop'         => $drop,
+            'drop_percent' => (int) round(($drop / $previous) * 100),
+            'previous'     => $previous,
+            'current'      => $current,
+            'recorded_at'  => $entries[0]['recorded_at'],
+        ];
+    }
+
+    usort($drops, static function (array $a, array $b): int {
+        return $b['drop_percent'] <=> $a['drop_percent'] ?: $b['drop'] <=> $a['drop'];
+    });
+    $drops = array_slice($drops, 0, max(1, min(40, $limit)));
+
+    $products = fetch_products_by_slugs(array_column($drops, 'slug'));
+    $productMap = [];
+    foreach ($products as $product) {
+        $productMap[strtolower((string) ($product['slug'] ?? ''))] = $product;
+    }
+
+    $out = [];
+    foreach ($drops as $drop) {
+        $product = $productMap[$drop['slug']] ?? null;
+        if ($product === null) {
+            continue;
+        }
+        $product['_price_drop'] = (float) $drop['drop'];
+        $out[] = [
+            'product'      => $product,
+            'drop'         => (float) $drop['drop'],
+            'drop_percent' => (int) $drop['drop_percent'],
+            'previous'     => (float) $drop['previous'],
+            'current'      => (float) $drop['current'],
+            'recorded_at'  => (string) $drop['recorded_at'],
+        ];
+    }
+    return $out;
+}

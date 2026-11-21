@@ -11,8 +11,13 @@ AddDefaultCharset UTF-8
     # SEO entry points and clean landing URLs.
     RewriteRule ^sitemap\.xml$ sitemap.php [L]
     RewriteRule ^feed\.xml$ feed.php [L]
+    RewriteRule ^deals/(under-[0-9]+)/?$ browse.php?type=budget&slug=$1 [L,QSA]
     RewriteRule ^deals/([a-z0-9-]+)/?$ browse.php?type=category&slug=$1 [L,QSA]
     RewriteRule ^store/([a-z0-9-]+)/?$ browse.php?type=store&slug=$1 [L,QSA]
+    RewriteRule ^guides/?$ guides.php [L]
+    RewriteRule ^guides/([a-z0-9-]+)/?$ guide.php?slug=$1 [L,QSA]
+    RewriteRule ^sale/([a-z0-9-]+)/?$ event.php?slug=$1 [L,QSA]
+    RewriteRule ^price-drops/?$ price-drops.php [L]
 </IfModule>
 
 # Block direct HTTP access to configuration and schema files.

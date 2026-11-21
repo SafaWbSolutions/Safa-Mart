@@ -89,8 +89,58 @@ GSC se import kar lo → sitemap submit karo.
 
 ---
 
-## 4. Google Merchant Center (free shopping traffic)
+## 4. Content landing pages (live)
 
+| URL | Kya target karta hai |
+|---|---|
+| `/deals/under-499` | "deals under 499", budget shoppers |
+| `/deals/under-999` | "deals under 999" |
+| `/deals/under-1999` | "deals under 1999" |
+| `/guides/` | Buying guide hub |
+| `/guides/best-mens-shirts-under-499` | "best shirts under 500" |
+| `/guides/best-kurtas-under-599` | "kurtas under 600" |
+| `/sale/big-billion-days` | Flipkart BBD tracker |
+| `/sale/end-of-reason-sale` | Myntra EORS tracker |
+| `/sale/great-indian-festival` | Amazon GIF tracker |
+| `/sale/ajio-big-bold-sale` | Ajio sale tracker |
+| `/price-drops` | "price drop tracker India" |
+
+Naya guide add karna ho to **`includes/guides.php`** me ek entry daalo — page, sitemap
+aur home links automatically ban jayenge.
+
+### Price history (optional, ek baar SQL chalana hai)
+
+Supabase SQL Editor me `database.sql` ka **price_history** section chalao:
+
+```sql
+create table if not exists public.price_history (
+    id bigserial primary key,
+    product_id bigint,
+    slug text not null,
+    price numeric(12,2) not null,
+    mrp numeric(12,2) not null default 0,
+    recorded_at timestamptz not null default now()
+);
+
+create index if not exists price_history_slug_idx
+    on public.price_history (slug, recorded_at desc);
+
+alter table public.price_history enable row level security;
+
+create policy "Public can read price history"
+    on public.price_history for select to anon, authenticated using (true);
+
+grant select on public.price_history to anon, authenticated;
+grant all privileges on public.price_history to service_role;
+```
+
+Uske baad har scrape / Telegram listing price snapshot save karega aur
+`/price-drops` + product page ka "Price history" block apne aap live ho jayega.
+Table na ho to kuch break nahi hota — bas section hidden rehta hai.
+
+---
+
+## 5. Google Merchant Center (free shopping traffic)
 1. <https://merchants.google.com> par account banao.
 2. **Products → Feeds → Add feed** → **Scheduled fetch**.
 3. Feed URL: `https://safamart.bis24.in/feed.xml`
@@ -101,7 +151,7 @@ GSC se import kar lo → sitemap submit karo.
 
 ---
 
-## 5. Off-page SEO — backlinks aur brand signals
+## 6. Off-page SEO — backlinks aur brand signals
 
 Google ranking me links aur brand mentions bade factor hain. Ye kaam **regular**
 karne padenge:
@@ -155,7 +205,7 @@ Thanks!
 
 ---
 
-## 6. Content calendar (pehle 90 din)
+## 7. Content calendar (pehle 90 din)
 
 | Week | Kaam |
 |---|---|
@@ -168,7 +218,7 @@ Thanks!
 
 ---
 
-## 7. Monthly SEO checklist
+## 8. Monthly SEO checklist
 
 - [ ] Search Console → Coverage/Indexing errors check karo
 - [ ] Sitemap last crawl date aur submitted URLs dekho
@@ -181,7 +231,7 @@ Thanks!
 
 ---
 
-## 8. Kya avoid karna hai
+## 9. Kya avoid karna hai
 
 - Fake reviews ya fake `aggregateRating` (Google manual action)
 - Keyword stuffing (same keyword bar-bar)
@@ -192,7 +242,7 @@ Thanks!
 
 ---
 
-## 9. SEO files map
+## 10. SEO files map
 
 | File | Kaam |
 |---|---|

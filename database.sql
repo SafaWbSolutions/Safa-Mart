@@ -180,5 +180,40 @@ grant select on public.products to anon, authenticated;
 grant all privileges on public.products to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
+-- ----------------------------------------------------------------------------
+-- Price history (optional)
+--   Every scrape / Telegram listing can store a price snapshot. The storefront
+--   uses it for the "price drops" page and the price history block on product
+--   pages. Safe to skip: pages simply show nothing until the table exists.
+-- ----------------------------------------------------------------------------
+create table if not exists public.price_history (
+    id bigserial primary key,
+    product_id bigint,
+    slug text not null,
+    price numeric(12,2) not null,
+    mrp numeric(12,2) not null default 0,
+    recorded_at timestamptz not null default now()
+);
+
+create index if not exists price_history_slug_idx
+    on public.price_history (slug, recorded_at desc);
+
+create index if not exists price_history_recent_idx
+    on public.price_history (recorded_at desc);
+
+alter table public.price_history enable row level security;
+
+drop policy if exists "Public can read price history" on public.price_history;
+create policy "Public can read price history"
+    on public.price_history
+    for select
+    to anon, authenticated
+    using (true);
+
+grant select on public.price_history to anon, authenticated;
+grant all privileges on public.price_history to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
 -- Refresh PostgREST's schema cache immediately.
 notify pgrst, 'reload schema';
+

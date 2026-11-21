@@ -1061,6 +1061,31 @@ class SupabaseClient:
             LOGGER.info("Upserted batch of %d products", len(chunk))
         return saved
 
+    def record_price_history(self, products: list[dict[str, Any]]) -> None:
+        """Store a price snapshot per product (optional price_history table)."""
+        rows: list[dict[str, Any]] = []
+        for product in products:
+            slug = str(product.get("slug") or "").strip().lower()
+            try:
+                price = float(product.get("price") or 0)
+                mrp = float(product.get("mrp") or 0)
+            except (TypeError, ValueError):
+                continue
+            if not slug or price <= 0:
+                continue
+            rows.append({
+                "slug": slug,
+                "price": price,
+                "mrp": mrp if mrp > 0 else price,
+                "recorded_at": utc_now(),
+            })
+        if not rows:
+            return
+        try:
+            self._request("POST", "price_history", json=rows)
+        except ScrapeError as error:
+            LOGGER.info("Price history skipped (table missing?): %s", error)
+
     def patch_metadata(self, preview: dict[str, Any]) -> None:
         """Backfill brand/rating/description on an existing product."""
         original_url = str(preview.get("original_url") or "")
@@ -1824,6 +1849,7 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
         else:
             if client is not None and collected:
                 total_saved = client.upsert(list(collected.values()))
+                client.record_price_history(list(collected.values()))
             LOGGER.info("Upserted %d product(s) out of %d prepared", total_saved, len(collected))
             LOGGER.info(
                 "Deal filter: %d new best deals, %d price drops | Skipped by deal filter: %d low discount (<%d%%), %d no price drop",

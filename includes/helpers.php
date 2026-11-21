@@ -989,6 +989,10 @@ function render_product_card(array $product): string
     $featuredHtml = $featuredBadge !== ''
         ? '<span class="card-featured">⭐ ' . e($featuredBadge) . '</span>'
         : '';
+    $priceDrop = (float) ($product['_price_drop'] ?? 0);
+    $dropHtml = $priceDrop > 0
+        ? '<span class="card-drop">↓ ' . e(inr($priceDrop)) . '</span>'
+        : '';
     $mrpHtml = ($mrp > $price && $price > 0)
         ? '<span class="price-mrp">' . e(inr($mrp)) . '</span>'
         : '';
@@ -999,6 +1003,7 @@ function render_product_card(array $product): string
         . $media
         . $discountHtml
         . $featuredHtml
+        . $dropHtml
         . '<span class="platform-badge platform-' . e($platformClass) . '">' . e($platform) . '</span>'
         . '</a>'
         . '<div class="product-body">'

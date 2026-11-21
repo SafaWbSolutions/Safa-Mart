@@ -253,3 +253,5 @@ require_once __DIR__ . '/includes/supabase.php';
 require_once __DIR__ . '/includes/featured.php';
 require_once __DIR__ . '/includes/ads.php';
 require_once __DIR__ . '/includes/seo.php';
+require_once __DIR__ . '/includes/guides.php';
+require_once __DIR__ . '/includes/events.php';

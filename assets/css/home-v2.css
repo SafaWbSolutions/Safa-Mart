@@ -539,6 +539,229 @@
     .tg-fab, .tg-fab-live { animation: none; }
 }
 
+/* ---------- Guides and sale trackers ---------- */
+.guide-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin: 8px 0 22px;
+}
+
+.guide-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+    color: inherit;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.guide-card:hover {
+    transform: translateY(-2px);
+    border-color: #fbd0e0;
+    box-shadow: 0 12px 26px rgba(233, 30, 99, .09);
+}
+
+.guide-card-kicker {
+    color: var(--brand-dark);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+.guide-card strong {
+    color: #1f1727;
+    font-size: 16.5px;
+    font-weight: 850;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+}
+
+.guide-card-desc {
+    color: #667085;
+    font-size: 12.5px;
+    line-height: 1.55;
+}
+
+.guide-card-meta {
+    margin-top: 4px;
+    color: #98a2b3;
+    font-size: 10.5px;
+    font-weight: 650;
+}
+
+.guide-kicker {
+    display: inline-block;
+    margin-bottom: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #f4efff;
+    color: #5b21b6;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.guide-picks { margin: 18px 0 8px; }
+
+.guide-section {
+    margin: 20px 0;
+    padding: 22px 24px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: #fff;
+}
+
+.guide-section h2 {
+    margin: 0 0 8px;
+    color: #1f1727;
+    font-size: 19px;
+    font-weight: 850;
+    line-height: 1.25;
+    letter-spacing: -.02em;
+}
+
+.guide-section p {
+    margin: 0 0 12px;
+    color: #5c5560;
+    font-size: 13.5px;
+    line-height: 1.75;
+}
+
+.guide-bullets {
+    margin: 4px 0 0;
+    padding-left: 20px;
+    color: #5c5560;
+    font-size: 13.5px;
+    line-height: 1.75;
+}
+
+.guide-bullets li { margin: 4px 0; }
+
+.event-hero {
+    position: relative;
+    margin: 8px 0 18px;
+    padding: 28px;
+    overflow: hidden;
+    border-radius: 22px;
+    color: #fff;
+    background: linear-gradient(120deg, #1a0b16 0%, #6d0d2c 58%, #e91e63 140%);
+    box-shadow: 0 20px 40px rgba(136, 22, 65, .22);
+}
+
+.event-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, .1) 1px, transparent 1px);
+    background-size: 22px 22px;
+    opacity: .35;
+    pointer-events: none;
+}
+
+.event-season {
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    padding: 4px 10px;
+    border: 1px solid rgba(255, 255, 255, .24);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .16);
+    font-size: 10.5px;
+    font-weight: 800;
+}
+
+.event-hero h1 {
+    position: relative;
+    z-index: 1;
+    margin: 10px 0 8px;
+    font-size: clamp(26px, 3.2vw, 38px);
+    font-weight: 900;
+    line-height: 1.12;
+    letter-spacing: -.04em;
+}
+
+.event-hero p {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    max-width: 760px;
+    color: rgba(255, 255, 255, .84);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.event-note {
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    margin-top: 12px;
+    color: #ffd0e2;
+    font-size: 10.5px;
+    font-weight: 650;
+}
+
+@media (max-width: 720px) {
+    .guide-card-grid { grid-template-columns: 1fr; }
+    .guide-card { padding: 15px; border-radius: 15px; }
+    .guide-section { padding: 17px 16px; border-radius: 16px; }
+    .guide-section h2 { font-size: 17px; }
+    .guide-section p, .guide-bullets { font-size: 12.5px; }
+    .event-hero { padding: 20px 17px; border-radius: 18px; }
+    .event-hero h1 { font-size: 24px; }
+    .event-hero p { font-size: 12.5px; }
+}
+
+/* ---------- Price drops ---------- */
+.card-drop {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 2;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #12b76a, #067647);
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 850;
+    box-shadow: 0 4px 12px rgba(6, 118, 71, .3);
+}
+
+.drop-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 16px 14px;
+    margin: 4px 0 8px;
+}
+
+.drop-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.drop-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 3px;
+}
+
+.drop-meta span {
+    color: #667085;
+    font-size: 10.5px;
+    line-height: 1.45;
+}
+
+.drop-meta strong { color: #067647; font-weight: 850; }
+.drop-meta s { color: #98a2b3; }
+
 /* ---------- Offer rails (Flipkart-style strip) ---------- */
 .deal-rail-section {
     position: relative;

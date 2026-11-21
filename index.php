@@ -668,6 +668,24 @@ if (SUPABASE_URL !== '') {
                     <a class="category-chip" href="<?= e(site_url('store/' . $seoStoreMeta['slug'])) ?>"><?= e($seoStoreName) ?> deals</a>
                 <?php endforeach; ?>
             </div>
+
+            <h2 style="margin-top:22px">Deals by budget</h2>
+            <div class="browse-link-grid">
+                <?php foreach (seo_budget_catalog() as $seoBudgetMeta): ?>
+                    <a class="category-chip" href="<?= e(site_url('deals/' . $seoBudgetMeta['slug'])) ?>"><?= e($seoBudgetMeta['label']) ?> deals</a>
+                <?php endforeach; ?>
+            </div>
+
+            <h2 style="margin-top:22px">Buying guides &amp; sale trackers</h2>
+            <div class="browse-link-grid">
+                <a class="category-chip" href="<?= e(site_url('price-drops')) ?>">🔥 Biggest price drops</a>
+                <?php foreach (seo_guide_catalog() as $seoGuideMeta): ?>
+                    <a class="category-chip" href="<?= e(site_url('guides/' . $seoGuideMeta['slug'])) ?>"><?= e($seoGuideMeta['h1']) ?></a>
+                <?php endforeach; ?>
+                <?php foreach (seo_event_catalog() as $seoEventMeta): ?>
+                    <a class="category-chip" href="<?= e(site_url('sale/' . $seoEventMeta['slug'])) ?>"><?= e($seoEventMeta['name']) ?></a>
+                <?php endforeach; ?>
+            </div>
         </section>
 
         <section class="browse-copy" aria-labelledby="seoAboutHeading">

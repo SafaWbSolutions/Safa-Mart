@@ -11,17 +11,34 @@ $slug = strtolower(trim((string) ($_GET['slug'] ?? '')));
 
 $isCategory = $type === 'category';
 $isStore = $type === 'store';
+$isBudget = $type === 'budget';
 $categoryMap = seo_category_slug_map();
 $storeMap = seo_store_slug_map();
+$budgetMap = seo_budget_catalog();
 
+$meta = null;
 $name = '';
+$pageUrl = '';
+$productFilters = [];
+
 if ($isCategory && isset($categoryMap[$slug])) {
     $name = $categoryMap[$slug];
+    $meta = seo_category_catalog()[$name];
+    $pageUrl = site_url('deals/' . $meta['slug']);
+    $productFilters = ['category' => $name];
 } elseif ($isStore && isset($storeMap[$slug])) {
     $name = $storeMap[$slug];
+    $meta = seo_store_catalog()[$name];
+    $pageUrl = site_url('store/' . $meta['slug']);
+    $productFilters = ['platform' => $name];
+} elseif ($isBudget && isset($budgetMap[$slug])) {
+    $meta = $budgetMap[$slug];
+    $name = $meta['label'];
+    $pageUrl = site_url('deals/' . $meta['slug']);
+    $productFilters = ['max_price' => $meta['max'], 'sort' => 'discount_desc'];
 }
 
-if ($name === '') {
+if ($meta === null) {
     http_response_code(404);
     $pageTitle = 'Page not found | ' . APP_NAME;
     ?>
@@ -46,13 +63,7 @@ if ($name === '') {
     exit;
 }
 
-$meta = $isCategory ? seo_category_catalog()[$name] : seo_store_catalog()[$name];
-$pageUrl = site_url(($isCategory ? 'deals/' : 'store/') . $meta['slug']);
-
-$products = fetch_storefront_products(
-    $isCategory ? ['category' => $name] : ['platform' => $name],
-    48
-);
+$products = fetch_storefront_products($productFilters, 48);
 $products = attach_featured_badges($products);
 
 $origin = rtrim(site_url(), '/');
@@ -178,7 +189,7 @@ $collectionSchema = seo_jsonld([
 
 <main class="site-container storefront-main">
     <nav class="category-strip" aria-label="Shop by category">
-        <a class="category-chip <?= $isCategory ? '' : 'is-active' ?>" href="<?= e(site_url('index.php')) ?>">All deals</a>
+        <a class="category-chip <?= ($isCategory || $isBudget) ? '' : 'is-active' ?>" href="<?= e(site_url('index.php')) ?>">All deals</a>
         <?php foreach (seo_category_catalog() as $catName => $catMeta): ?>
             <a class="category-chip <?= ($isCategory && $catName === $name) ? 'is-active' : '' ?>"
                href="<?= e(site_url('deals/' . $catMeta['slug'])) ?>"><?= e($catName) ?></a>
@@ -232,6 +243,15 @@ $collectionSchema = seo_jsonld([
             <?php endforeach; ?>
             <?php foreach (seo_store_catalog() as $storeName => $storeMeta): ?>
                 <a class="category-chip" href="<?= e(site_url('store/' . $storeMeta['slug'])) ?>"><?= e($storeName) ?> deals</a>
+            <?php endforeach; ?>
+            <?php foreach (seo_budget_catalog() as $budgetMeta): ?>
+                <a class="category-chip" href="<?= e(site_url('deals/' . $budgetMeta['slug'])) ?>"><?= e($budgetMeta['label']) ?> deals</a>
+            <?php endforeach; ?>
+            <?php foreach (seo_guide_catalog() as $guideMeta): ?>
+                <a class="category-chip" href="<?= e(site_url('guides/' . $guideMeta['slug'])) ?>"><?= e($guideMeta['h1']) ?></a>
+            <?php endforeach; ?>
+            <?php foreach (seo_event_catalog() as $eventMeta): ?>
+                <a class="category-chip" href="<?= e(site_url('sale/' . $eventMeta['slug'])) ?>"><?= e($eventMeta['name']) ?></a>
             <?php endforeach; ?>
         </div>
     </section>

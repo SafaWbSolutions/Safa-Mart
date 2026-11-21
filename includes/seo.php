@@ -247,6 +247,55 @@ function seo_store_slug_map(): array
     return $map;
 }
 
+/**
+ * Budget landing pages: /deals/under-499 etc.
+ *
+ * @return array<string,array{slug:string,label:string,max:int,title:string,h1:string,intro:string,long:string}>
+ */
+function seo_budget_catalog(): array
+{
+    return [
+        'under-499' => [
+            'slug'  => 'under-499',
+            'label' => 'Under ₹499',
+            'max'   => 499,
+            'title' => 'Deals Under ₹499 – Fashion, Beauty & Essentials | Safa Mart',
+            'h1'    => 'Best deals under ₹499',
+            'intro' => 'Everyday finds, fashion and beauty picks priced below ₹499 from Flipkart, Myntra, Ajio, Shopsy and DigiHaat.',
+            'long'  => 'Small budgets still deserve real discounts. These listings are all under ₹499 at the current merchant price, so you can stock up on everyday essentials without waiting for a big sale. Filter by store or category to narrow the list.',
+        ],
+        'under-999' => [
+            'slug'  => 'under-999',
+            'label' => 'Under ₹999',
+            'max'   => 999,
+            'title' => 'Deals Under ₹999 – Shoes, Kurtas & Gadgets | Safa Mart',
+            'h1'    => 'Best deals under ₹999',
+            'intro' => 'Footwear, kurtas, gadgets and accessories under ₹999 with live marketplace discounts.',
+            'long'  => 'The ₹500–₹999 range is where most useful deals sit: a decent pair of shoes, a kurta for a function, or a gadget you have been putting off. Compare the current price with the listed MRP and open the store only when the saving looks right.',
+        ],
+        'under-1999' => [
+            'slug'  => 'under-1999',
+            'label' => 'Under ₹1999',
+            'max'   => 1999,
+            'title' => 'Deals Under ₹1999 – Brand Fashion & Electronics | Safa Mart',
+            'h1'    => 'Best deals under ₹1999',
+            'intro' => 'Brand-name fashion, footwear and electronics deals under ₹1999, updated through the day.',
+            'long'  => 'Upgrade to branded products without crossing ₹1999. Every card shows the discount calculated from the merchant listing, so you can spot a genuine markdown instead of an inflated MRP.',
+        ],
+    ];
+}
+
+/** @return array<string,string> slug => label */
+function seo_budget_slug_map(): array
+{
+    $map = [];
+    foreach (seo_budget_catalog() as $meta) {
+        $map[$meta['slug']] = $meta['label'];
+    }
+    return $map;
+}
+
+
 function seo_xml_escape(string $value): string
 {
     return htmlspecialchars($value, ENT_QUOTES | ENT_XML1, 'UTF-8');
@@ -303,6 +352,49 @@ function seo_sitemap_xml(): string
                 'priority'   => '0.7',
                 'lastmod'    => gmdate('c'),
             ];
+        }
+        if (function_exists('seo_budget_catalog')) {
+            foreach (seo_budget_catalog() as $meta) {
+                $urls[] = [
+                    'loc'        => site_url('deals/' . $meta['slug']),
+                    'changefreq' => 'daily',
+                    'priority'   => '0.7',
+                    'lastmod'    => gmdate('c'),
+                ];
+            }
+        }
+        if (function_exists('seo_guide_catalog')) {
+            $urls[] = [
+                'loc'        => site_url('guides/'),
+                'changefreq' => 'weekly',
+                'priority'   => '0.7',
+                'lastmod'    => gmdate('c'),
+            ];
+            $urls[] = [
+                'loc'        => site_url('price-drops'),
+                'changefreq' => 'hourly',
+                'priority'   => '0.7',
+                'lastmod'    => gmdate('c'),
+            ];
+            foreach (seo_guide_catalog() as $meta) {
+                $stamp = strtotime((string) $meta['updated']);
+                $urls[] = [
+                    'loc'        => site_url('guides/' . $meta['slug']),
+                    'changefreq' => 'weekly',
+                    'priority'   => '0.7',
+                    'lastmod'    => $stamp !== false ? gmdate('c', $stamp) : gmdate('c'),
+                ];
+            }
+        }
+        if (function_exists('seo_event_catalog')) {
+            foreach (seo_event_catalog() as $meta) {
+                $urls[] = [
+                    'loc'        => site_url('sale/' . $meta['slug']),
+                    'changefreq' => 'daily',
+                    'priority'   => '0.6',
+                    'lastmod'    => gmdate('c'),
+                ];
+            }
         }
 
         if (supabase_is_configured()) {
