@@ -785,6 +785,65 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
         rating_count = int(normalize_price(first_meta(meta, ["product:rating:count"])))
     rating = max(0.0, min(5.0, round(rating, 2)))
 
+    specs: list[dict[str, str]] = []
+    seen_specs: set[str] = set()
+
+    def add_spec(key: str, value: str) -> None:
+        key = clean_text(key)
+        value = clean_text(value)
+        if not key or not value or len(key) > 60 or len(value) > 400:
+            return
+        if re.search(r"price|mrp|delivery|seller|emi|rating|review|offers?", key, re.I):
+            return
+        if re.search(r"color|variant|offer|refund|protection|similar|try on|bank|warranty|return|coupon|purchase|sold|highlight|installation|retail|store", key, re.I):
+            return
+        if not re.match(r"^[A-Za-z][A-Za-z0-9 &/().,-]{1,40}$", key):
+            return
+        if re.search(r"\d", key) or len(key) > 40:
+            return
+        if re.search(r"₹|view similar|upto|applied|bank offer|free delivery|product sold|key product attributes|delivered on", value, re.I):
+            return
+        lowered = key.lower()
+        if lowered in seen_specs:
+            return
+        seen_specs.add(lowered)
+        specs.append({"key": key, "value": value})
+
+    properties = product_ld.get("additionalProperty") if isinstance(product_ld, dict) else None
+    if isinstance(properties, list):
+        for prop in properties:
+            if isinstance(prop, dict):
+                add_spec(str(prop.get("name") or ""), str(prop.get("value") or ""))
+
+    # DigiHaat / ONDC tag list.
+    if '"tags"' in html:
+        decoded = html.replace('\\"', '"').replace('\\/', '/')
+        tag_block = re.search(r'"tags"\s*:\s*\[(.*?)\]', decoded, re.S)
+        if tag_block:
+            for match in re.finditer(r'"key"\s*:\s*"([^"]+)"\s*,\s*"value"\s*:\s*"([^"]+)"', tag_block.group(1)):
+                add_spec(match.group(1), match.group(2))
+            for match in re.finditer(r'"value"\s*:\s*"([^"]+)"\s*,\s*"key"\s*:\s*"([^"]+)"', tag_block.group(1)):
+                add_spec(match.group(2), match.group(1))
+
+    # Flipkart / Shopsy embedded spec pairs.
+    for match in re.finditer(r'\\?"label_0\\?"\s*:\s*\{\s*"value"\s*:\s*\{\s*"text"\s*:\s*\[?\s*"([^"]{1,60})"', html):
+        # Key comes after its values in Flipkart's payload, so look back and
+        # take the nearest value.
+        window = html[max(0, match.start() - 700): match.start()]
+        values = re.findall(r'\\?"label_[12]\\?"\s*:\s*\{\s*"value"\s*:\s*\{\s*"text"\s*:\s*\[?\s*"([^"]{1,200})"', window)
+        if values:
+            add_spec(match.group(1), values[-1])
+        if len(specs) >= 30:
+            break
+
+    # Amazon / Flipkart / Shopsy spec tables.
+    for row in soup.find_all("tr"):
+        cells = row.find_all(["th", "td"])
+        if len(cells) >= 2:
+            add_spec(cells[0].get_text(" ", strip=True), cells[1].get_text(" ", strip=True))
+        if len(specs) >= 30:
+            break
+
     canonical_tag = soup.find("link", rel=lambda value: value and "canonical" in value)
     canonical = canonical_tag.get("href", "") if canonical_tag else first_meta(meta, ["og:url"])
     canonical = urljoin(base_url, canonical) if canonical else base_url
@@ -801,6 +860,7 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
         "brand": brand,
         "rating": rating,
         "rating_count": rating_count,
+        "specs": specs[:30],
         "category_hint": category_hint,
         "canonical_url": canonical,
         "platform": detect_platform(base_url),
@@ -1456,6 +1516,7 @@ def build_product_payload(
         "brand": truncate(metadata.get("brand", ""), 120),
         "rating": float(metadata.get("rating") or 0),
         "rating_count": int(metadata.get("rating_count") or 0),
+        "specs": metadata.get("specs", []),
         "thumbnail_url": gallery[0],
         "gallery_urls": gallery,
         "affiliate_url": affiliate_url,

@@ -258,6 +258,109 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl, st
 }
 
 /**
+ * Collect product specifications (RAM, storage, display, battery, ...).
+ *
+ * Sources: JSON-LD additionalProperty, Amazon/Flipkart spec tables and the
+ * ONDC tag list used by DigiHaat.
+ *
+ * @return list<array{key:string,value:string}>
+ */
+function collect_specifications(string $html, array $jsonProduct): array
+{
+    $specs = [];
+    $add = static function (string $key, string $value) use (&$specs): void {
+        $key = trim((string) preg_replace('/\s+/', ' ', clean_text($key)));
+        $value = trim((string) preg_replace('/\s+/', ' ', clean_text($value)));
+        if ($key === '' || $value === '' || strlen($key) > 60 || strlen($value) > 400) {
+            return;
+        }
+        if (preg_match('/^(price|mrp|rating|reviews?|seller|description|offers?|delivery|total|emi)$/i', $key)) {
+            return;
+        }
+        if (preg_match('/price|delivery|seller|retail|store|emi|rating|review|color|variant|offer|refund|protection|similar|try on|bank|warranty|return|coupon|purchase|sold|highlight|installation/i', $key)) {
+            return;
+        }
+        if (!preg_match('/^[A-Za-z][A-Za-z0-9 &\/().,-]{1,40}$/', $key)) {
+            return;
+        }
+        if (preg_match('/\d/', $key) || strlen($key) > 40) {
+            return;
+        }
+        if (preg_match('/₹|view similar|upto|applied|bank offer|free delivery|product sold|key product attributes|delivered on/i', $value)) {
+            return;
+        }
+        $id = strtolower($key);
+        if (!isset($specs[$id])) {
+            $specs[$id] = ['key' => $key, 'value' => $value];
+        }
+    };
+
+    // 1) JSON-LD additionalProperty (Amazon, Flipkart and many others).
+    $properties = $jsonProduct['additionalProperty'] ?? [];
+    if (is_array($properties)) {
+        foreach ($properties as $property) {
+            if (!is_array($property)) {
+                continue;
+            }
+            $key = (string) ($property['name'] ?? '');
+            $value = $property['value'] ?? '';
+            if (is_array($value)) {
+                $value = implode(', ', array_filter($value, 'is_scalar'));
+            }
+            if ($key !== '' && is_scalar($value)) {
+                $add($key, (string) $value);
+            }
+        }
+    }
+
+    // 2) DigiHaat / ONDC tag list: [{"key":"Net Quantity","value":"100 g"}]
+    $decoded = str_replace(['\\"', '\\/', '\\u002F', '\\u002f'], ['"', '/', '/', '/'], $html);
+    if (strpos($decoded, '"tags"') !== false && preg_match('/"tags"\s*:\s*\[(.*?)\]/s', $decoded, $tagBlock)) {
+        if (preg_match_all('/"key"\s*:\s*"([^"]+)"\s*,\s*"value"\s*:\s*"([^"]+)"/', $tagBlock[1], $pairs, PREG_SET_ORDER)) {
+            foreach ($pairs as $pair) {
+                $add($pair[1], $pair[2]);
+            }
+        }
+        if (preg_match_all('/"value"\s*:\s*"([^"]+)"\s*,\s*"key"\s*:\s*"([^"]+)"/', $tagBlock[1], $pairs, PREG_SET_ORDER)) {
+            foreach ($pairs as $pair) {
+                $add($pair[2], $pair[1]);
+            }
+        }
+    }
+
+    // 2b) Flipkart / Shopsy embedded spec pairs:
+    // {"label_0":{"value":{"text":"RAM"}},...,"label_1":{"value":{"text":["4 GB"]}}}
+    if (preg_match_all('/\\\\?"label_0\\\\?"\s*:\s*\{\s*"value"\s*:\s*\{\s*"text"\s*:\s*\[?\s*"([^"]{1,60})"/', $html, $labelMatches, PREG_OFFSET_CAPTURE)) {
+        foreach ($labelMatches[1] as $index => $labelMatch) {
+            $offset = (int) ($labelMatches[0][$index][1] ?? 0);
+            // Key comes after its values in Flipkart's payload, so look back.
+            $window = substr($html, max(0, $offset - 700), 700);
+            if (preg_match_all('/\\\\?"label_[12]\\\\?"\s*:\s*\{\s*"value"\s*:\s*\{\s*"text"\s*:\s*\[?\s*"([^"]{1,200})"/', $window, $valueMatches)) {
+                $add($labelMatch[0], (string) end($valueMatches[1]));
+            }
+            if (count($specs) >= 30) {
+                break;
+            }
+        }
+    }
+
+    // 3) Spec tables (Amazon productDetails, Flipkart, Shopsy, ...).
+    if (preg_match_all('~<tr\b[^>]*>(.*?)</tr>~is', $html, $rows)) {
+        foreach ($rows[1] as $row) {
+            if (!preg_match_all('~<(th|td)\b[^>]*>(.*?)</\1>~is', $row, $cells) || count($cells[2]) < 2) {
+                continue;
+            }
+            $add($cells[2][0], $cells[2][1]);
+            if (count($specs) >= 30) {
+                break;
+            }
+        }
+    }
+
+    return array_slice(array_values($specs), 0, 30);
+}
+
+/**
  * Pull product name/photos out of the embedded store JSON.
  *
  * DigiHaat (ONDC) pages publish only the site logo in OpenGraph; the real
@@ -873,6 +976,8 @@ function scrape_product_metadata(string $url): array
         $canonical = $response['effective_url'] ?? $url;
     }
 
+    $specs = collect_specifications($html, $jsonProduct);
+
     return [
         'title'          => $title,
         'description'    => truncate_text($description, 1800),
@@ -884,6 +989,7 @@ function scrape_product_metadata(string $url): array
         'brand'          => clean_text($brand),
         'rating'         => $rating,
         'rating_count'   => $ratingCount,
+        'specs'          => $specs,
         'category_hint'  => clean_text($categoryHint),
         'availability'   => $availability,
         'platform'       => detect_platform($response['effective_url'] ?? $url),

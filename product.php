@@ -43,6 +43,13 @@ if ($platformClass === '') {
     $platformClass = 'store';
 }
 
+$specs = [];
+if (isset($product['specs']) && is_array($product['specs'])) {
+    $specs = array_values(array_filter($product['specs'], static function ($spec): bool {
+        return is_array($spec) && trim((string) ($spec['key'] ?? '')) !== '' && trim((string) ($spec['value'] ?? '')) !== '';
+    }));
+}
+
 $related = fetch_related_products($category, $id, 8);
 $shareTitle = $title . ' at ' . ($price > 0 ? inr($price) : 'a great price') . ' on ' . APP_NAME;
 $whatsappUrl = 'https://wa.me/?text=' . rawurlencode($shareTitle . ' ' . $productUrl);
@@ -337,6 +344,20 @@ $breadcrumbSchema = [
             <div><span>Price checked</span><strong><?= e($lastChecked !== '' ? $lastChecked : 'Recently') ?></strong></div>
         </div>
     </section>
+
+    <?php if ($specs): ?>
+        <section class="product-specs" aria-labelledby="specsHeading">
+            <h2 id="specsHeading">Specifications</h2>
+            <div class="specs-grid">
+                <?php foreach ($specs as $spec): ?>
+                    <div class="spec-row">
+                        <span><?= e((string) ($spec['key'] ?? '')) ?></span>
+                        <strong><?= e((string) ($spec['value'] ?? '')) ?></strong>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <?php if ($related): ?>
         <section class="related-section" aria-labelledby="relatedHeading">

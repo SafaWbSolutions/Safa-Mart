@@ -298,6 +298,7 @@ if ($command === '/refreshmeta') {
         $row['rating'] = (float) ($meta['rating'] ?? 0);
         $row['rating_count'] = (int) ($meta['rating_count'] ?? 0);
         $row['description'] = truncate_text((string) ($meta['description'] ?? ''), 1800);
+        $row['specs'] = is_array($meta['specs'] ?? null) ? $meta['specs'] : [];
         $row['last_checked_at'] = gmdate('c');
         $save = supabase_upsert($row, 'original_url');
         if ($save['ok']) {
@@ -553,6 +554,7 @@ foreach ($urls as $url) {
             'brand'            => truncate_text(clean_text((string) ($metadata['brand'] ?? '')), 120),
             'rating'           => (float) ($metadata['rating'] ?? 0),
             'rating_count'     => (int) ($metadata['rating_count'] ?? 0),
+            'specs'            => is_array($metadata['specs'] ?? null) ? $metadata['specs'] : [],
             'thumbnail_url'    => $primaryImage['url'],
             'gallery_urls'     => $gallery,
             'affiliate_url'    => $affiliate['url'],
