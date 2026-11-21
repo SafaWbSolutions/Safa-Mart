@@ -49,7 +49,7 @@ if (!telegram_chat_allowed($chatId)) {
 
 $text = trim((string) ($message['text'] ?? ($message['caption'] ?? '')));
 if ($text === '') {
-    telegram_send_message($chatId, 'Send me a product link from Flipkart, Myntra, Ajio or Amazon and I will add it to the store.');
+    telegram_send_message($chatId, 'Send me a product link from Flipkart, Myntra or Amazon and I will add it to the store.');
     json_response(['ok' => true, 'ignored' => 'empty message']);
 }
 
@@ -58,7 +58,7 @@ $command = strtolower(explode('@', (string) ($parts[0] ?? ''))[0]);
 if ($command === '/start' || $command === '/help') {
     $welcome = '🛍️ <b>' . telegram_escape(APP_NAME) . ' listing bot</b>' . "\n\n"
         . 'Send one or more product links (up to 2 per message). I will convert the affiliate link, download the image, optimise it to WebP and publish the product.' . "\n\n"
-        . "Supported: Flipkart, Myntra, Ajio, Amazon and more.\n"
+        . "Supported: Flipkart, Myntra, Amazon and more.\n"
         . "Commands: /id – show this chat ID\n"
         . "/debug <link> – explain why a link fails\n"
         . "Store: " . telegram_escape(site_url('index.php'));
@@ -193,10 +193,17 @@ foreach ($urls as $url) {
         }
         $seen[$canonicalUrl] = true;
 
+        if (is_blocked_url($canonicalUrl)) {
+            throw new RuntimeException('This store is not accepted. Please send a product link from Flipkart, Myntra, Amazon, Snapdeal, Tata CLiQ, Nykaa, Croma or another supported store.');
+        }
+
         $productUrl = resolve_merchant_url($canonicalUrl);
         $platform = detect_platform($productUrl);
+        if (is_blocked_url($productUrl) || is_blocked_platform($platform)) {
+            throw new RuntimeException('This store is not accepted. Please send a product link from Flipkart, Myntra, Amazon, Snapdeal, Tata CLiQ, Nykaa, Croma or another supported store.');
+        }
         if ($platform === 'Other') {
-            throw new RuntimeException('This is not a supported store product page. Send a direct product link, for example from Flipkart, Myntra, Ajio or Amazon.');
+            throw new RuntimeException('This is not a supported store product page. Send a direct product link, for example from Flipkart, Myntra or Amazon.');
         }
 
         $affiliate = convert_to_affiliate($productUrl, $platform);

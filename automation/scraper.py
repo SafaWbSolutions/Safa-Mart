@@ -91,6 +91,12 @@ EARNKARO_PLATFORMS = {
     "IKEA", "JioMart", "BigBasket",
 }
 
+# Stores that must never be listed or shown. Domain entries match the host and
+# its subdomains; entries without a dot match the host as a substring so
+# "hamaramall" covers hamaramall.in / .com / .shop.
+BLOCKED_PLATFORMS = {"Ajio", "Hamara Mall", "HamaraMall"}
+BLOCKED_DOMAINS = ("ajio.com", "ajjio.in", "hamaramall")
+
 TRACKING_KEYS = re.compile(
     r"^(utm_.*|gclid|fbclid|msclkid|yclid|igshid|si|ref|ref_|affid|affExtParam\d+|"
     r"tag|linkCode|linkId|camp|creative|creativeASIN|ascsubtag|_ga|mc_cid|mc_eid|icid|cid)$",
@@ -229,6 +235,39 @@ def detect_platform(url: str) -> str:
         if host == domain or host.endswith("." + domain):
             return name
     return "Other"
+
+
+def host_is_blocked(url_or_host: str) -> bool:
+    host = url_or_host
+    if "://" in host or "/" in host:
+        host = host_of(host)
+    host = host.strip().lower().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    if not host:
+        return False
+    for domain in BLOCKED_DOMAINS:
+        if "." in domain:
+            if host == domain or host.endswith("." + domain):
+                return True
+        elif domain in host:
+            return True
+    return False
+
+
+def url_is_blocked(url: str) -> bool:
+    if host_is_blocked(url):
+        return True
+    return detect_platform(url) in BLOCKED_PLATFORMS
+
+
+def product_row_is_blocked(row: dict[str, Any]) -> bool:
+    if str(row.get("source_platform") or "") in BLOCKED_PLATFORMS:
+        return True
+    for key in ("original_url", "affiliate_url"):
+        if url_is_blocked(str(row.get(key) or "")):
+            return True
+    return False
 
 
 def canonicalize_url(url: str) -> str:
@@ -1126,6 +1165,10 @@ def check_existing_products(
         product_url = str(row.get("original_url") or "")
         if product_id < 1 or not product_url:
             continue
+        if product_row_is_blocked(row):
+            LOGGER.info("Stock check: deactivating blocked product %s", product_id)
+            broken.append(product_id)
+            continue
         if not is_safe_public_url(product_url):
             continue
 
@@ -1241,6 +1284,9 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
                 if len(collected) >= config.max_products:
                     break
                 if link in collected:
+                    continue
+                if url_is_blocked(link):
+                    LOGGER.warning("Skipping blocked store: %s", link)
                     continue
                 try:
                     if config.dry_run:

@@ -297,7 +297,6 @@ button {
 .platform-dot-all { background: linear-gradient(135deg, #2874f0, #ff3f6c); }
 .platform-dot-flipkart { background: #2874f0; }
 .platform-dot-myntra { background: #ff3f6c; }
-.platform-dot-ajio { background: #d4a017; }
 .platform-dot-amazon { background: #ff9900; }
 
 /* ---------- Category chips ---------- */
@@ -603,7 +602,6 @@ button {
 
 .platform-flipkart { color: #2874f0; }
 .platform-myntra { color: #e5235d; }
-.platform-ajio { color: #a77a0b; }
 .platform-amazon { color: #b45309; }
 .platform-store { color: #475467; }
 

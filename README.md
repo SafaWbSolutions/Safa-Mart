@@ -32,7 +32,7 @@ No cart, no checkout: **Buy Now** tracks the click in Supabase and redirects to 
 - Supabase project (free tier is sufficient).
 - Hostinger shared hosting with HTTPS and a writable `uploads/` and `logs/` directory.
 - Telegram bot token from **@BotFather**.
-- EarnKaro account and API token (for Flipkart, Myntra, Ajio, Amazon, etc.).
+- EarnKaro account and API token (for Flipkart, Myntra, Amazon, etc.).
 - GitHub repository for the scheduled workflow.
 
 ---
@@ -176,7 +176,7 @@ curl "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
 - Verifies `X-Telegram-Bot-Api-Secret-Token` with `hash_equals`.
 - Optional chat allowlist plus per-chat rate limiting.
 - Extracts up to two URLs from a message caption/text.
-- Converts supported stores (Flipkart, Myntra, Ajio, Amazon, etc.) through EarnKaro using `Authorization: Bearer <EARNKARO_TOKEN>`.
+- Converts supported stores (Flipkart, Myntra, Amazon, etc.) through EarnKaro using `Authorization: Bearer <EARNKARO_TOKEN>`.
 - Scrapes `og:title`, `og:image`, OpenGraph price and JSON-LD `Product`/`Offer`.
 - Downloads up to three images, resizes them, converts to WebP with GD, and stores them under `uploads/products/YYYY/MM/`.
 - Upserts to Supabase on `original_url` with `Prefer: resolution=merge-duplicates`.
@@ -202,7 +202,7 @@ Push the repository to GitHub. Then open **Settings â†’ Secrets and variables â†
 | `UPLOAD_API_SECRET` | Yes | same value as in `config.local.php` |
 | `EARNKARO_TOKEN` | Recommended | EarnKaro API token |
 | `EARNKARO_API_URL` | Optional | converter endpoint override |
-| `FEED_URLS` | Optional | comma/newline-separated EarnKaro-supported category/feed URLs (Flipkart, Myntra, Ajio, Amazon, etc.) |
+| `FEED_URLS` | Optional | comma/newline-separated EarnKaro-supported category/feed URLs (Flipkart, Myntra, Amazon, etc.) |
 
 The workflow runs at **minute 0 of every fourth hour** (`0 */4 * * *`) and can also be started manually:
 

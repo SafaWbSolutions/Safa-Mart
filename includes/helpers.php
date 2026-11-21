@@ -329,6 +329,146 @@ function detect_platform(string $url): string
     return 'Other';
 }
 
+/**
+ * @return list<string>
+ */
+function blocked_platform_names(): array
+{
+    $names = [];
+    foreach (BLOCKED_PLATFORMS as $platform) {
+        $platform = trim((string) $platform);
+        if ($platform !== '' && !in_array($platform, $names, true)) {
+            $names[] = $platform;
+        }
+    }
+    return $names;
+}
+
+/**
+ * @return list<string>
+ */
+function blocked_domains(): array
+{
+    $domains = [];
+    foreach (BLOCKED_DOMAINS as $domain) {
+        $domain = trim((string) $domain);
+        if ($domain !== '' && !in_array($domain, $domains, true)) {
+            $domains[] = $domain;
+        }
+    }
+    return $domains;
+}
+
+function is_blocked_platform(string $platform): bool
+{
+    $platform = normalize_platform_token($platform);
+    if ($platform === '') {
+        return false;
+    }
+    foreach (blocked_platform_names() as $blocked) {
+        if (normalize_platform_token($blocked) === $platform) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function normalize_platform_token(string $platform): string
+{
+    $lower = function_exists('mb_strtolower') ? mb_strtolower(trim($platform)) : strtolower(trim($platform));
+    return (string) preg_replace('/[^a-z0-9]/', '', $lower);
+}
+
+function host_is_blocked(string $host): bool
+{
+    $host = strtolower(trim($host));
+    $host = preg_replace('/^www\./', '', rtrim($host, '.')) ?? '';
+    if ($host === '') {
+        return false;
+    }
+    foreach (blocked_domains() as $domain) {
+        $domain = strtolower(trim($domain));
+        if ($domain === '') {
+            continue;
+        }
+        if (str_contains($domain, '.')) {
+            if ($host === $domain || str_ends_with($host, '.' . $domain)) {
+                return true;
+            }
+            continue;
+        }
+        if (str_contains($host, $domain)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function is_blocked_url(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+    if (host_is_blocked((string) parse_url($url, PHP_URL_HOST))) {
+        return true;
+    }
+    return is_blocked_platform(detect_platform($url));
+}
+
+/**
+ * @param array<string,mixed> $product
+ */
+function is_blocked_product(array $product): bool
+{
+    if (is_blocked_platform((string) ($product['source_platform'] ?? ''))) {
+        return true;
+    }
+    foreach (['original_url', 'affiliate_url'] as $key) {
+        if (is_blocked_url((string) ($product[$key] ?? ''))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * PostgREST filter that keeps blocked stores out of every storefront query.
+ * Applied alongside the PHP-side filter in the Supabase helpers.
+ */
+function storefront_exclusion_query(): string
+{
+    $parts = [];
+
+    $platforms = blocked_platform_names();
+    if ($platforms) {
+        $quoted = [];
+        foreach ($platforms as $platform) {
+            // PostgREST `in.()` values must stay single tokens; "Hamara Mall"
+            // becomes HamaraMall so both spellings block the same store.
+            $token = preg_replace('/[^A-Za-z0-9_-]/', '', $platform);
+            if ($token !== '' && !in_array($token, $quoted, true)) {
+                $quoted[] = $token;
+            }
+        }
+        if ($quoted) {
+            $parts[] = 'source_platform=not.in.(' . implode(',', $quoted) . ')';
+        }
+    }
+
+    $likes = [];
+    foreach (blocked_domains() as $domain) {
+        $pattern = '*' . str_replace('*', '', $domain) . '*';
+        $likes[] = 'original_url.ilike.' . $pattern;
+        $likes[] = 'affiliate_url.ilike.' . $pattern;
+    }
+    if ($likes) {
+        $parts[] = 'not.or=(' . implode(',', $likes) . ')';
+    }
+
+    return $parts === [] ? '' : '&' . implode('&', $parts);
+}
+
 function canonicalize_product_url(string $url): string
 {
     $url = trim($url);

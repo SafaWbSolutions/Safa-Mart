@@ -236,7 +236,12 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
             . ',source_platform.ilike.' . $pattern . ')';
     }
 
-    $result = supabase_request('GET', supabase_table() . '?' . $query);
+    $result = supabase_request('GET', supabase_table() . '?' . $query . storefront_exclusion_query());
+    if (!$result['ok']) {
+        // Older PostgREST builds reject the grouped negation; fall back to the
+        // unfiltered query and rely on the PHP-side blocklist below.
+        $result = supabase_request('GET', supabase_table() . '?' . $query);
+    }
     if (!$result['ok']) {
         app_log('error', 'Storefront product fetch failed', [
             'status' => $result['status'],
@@ -244,7 +249,10 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         ]);
         return [];
     }
-    return is_array($result['data']) ? array_values(array_filter($result['data'], 'is_array')) : [];
+    $rows = is_array($result['data']) ? array_values(array_filter($result['data'], 'is_array')) : [];
+    return array_values(array_filter($rows, static function (array $product): bool {
+        return !is_blocked_product($product);
+    }));
 }
 
 /** @return array<string,mixed>|null */
@@ -265,6 +273,9 @@ function find_product_by_slug(string $slug): ?array
         }
         return null;
     }
+    if (is_blocked_product($result['data'][0])) {
+        return null;
+    }
     return $result['data'][0];
 }
 
@@ -277,6 +288,9 @@ function find_product_by_id(int $id): ?array
     $query = 'select=*&id=eq.' . $id . '&is_active=eq.true&limit=1';
     $result = supabase_request('GET', supabase_table() . '?' . $query);
     if (!$result['ok'] || !is_array($result['data']) || empty($result['data'][0]) || !is_array($result['data'][0])) {
+        return null;
+    }
+    if (is_blocked_product($result['data'][0])) {
         return null;
     }
     return $result['data'][0];
@@ -294,9 +308,15 @@ function fetch_related_products(string $category, int $excludeId, int $limit = 8
     if ($category !== '' && in_array($category, PRODUCT_CATEGORIES, true)) {
         $query .= '&category=eq.' . rawurlencode($category);
     }
-    $result = supabase_request('GET', supabase_table() . '?' . $query);
+    $result = supabase_request('GET', supabase_table() . '?' . $query . storefront_exclusion_query());
+    if (!$result['ok']) {
+        $result = supabase_request('GET', supabase_table() . '?' . $query);
+    }
     if (!$result['ok'] || !is_array($result['data'])) {
         return [];
     }
-    return array_values(array_filter($result['data'], 'is_array'));
+    $rows = array_values(array_filter($result['data'], 'is_array'));
+    return array_values(array_filter($rows, static function (array $product): bool {
+        return !is_blocked_product($product);
+    }));
 }
