@@ -297,6 +297,12 @@ function scrape_ajio_search_fallback(string $url): array
         'referer'   => 'https://www.ajio.com/',
     ]);
     if (!$response['ok'] || (int) $response['status'] !== 200) {
+        $reader = http_request_via_reader($searchUrl);
+        if ($reader['ok']) {
+            $response = $reader;
+        }
+    }
+    if (!$response['ok'] || (int) $response['status'] !== 200) {
         return [];
     }
 
@@ -520,10 +526,19 @@ function expand_collection_url(string $url, int $limit = 2, array $affiliatePara
             'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
             'referer'   => origin_of_url($target),
         ]);
+        $via = 'direct';
+        if (!$response['ok'] || (int) $response['status'] !== 200) {
+            $reader = http_request_via_reader($target);
+            if ($reader['ok']) {
+                $response = $reader;
+                $via = 'reader';
+            }
+        }
         $debug['attempts'][] = [
             'url'    => $target,
             'status' => (int) $response['status'],
             'bytes'  => strlen((string) $response['body']),
+            'via'    => $via,
             'error'  => (string) ($response['error'] ?? ''),
         ];
         if (!$response['ok'] || (int) $response['status'] !== 200) {

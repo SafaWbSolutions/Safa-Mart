@@ -501,6 +501,65 @@ function is_merchant_url(string $url): bool
 }
 
 /**
+ * Fetch a page through the r.jina.ai reader when the merchant blocks this
+ * server's IP (Ajio answers HTTP 403 to datacenter addresses).
+ *
+ * @return array{ok:bool,status:int,body:string,effective_url:string,error:string,headers:array<string,mixed>}
+ */
+function http_request_via_reader(string $url): array
+{
+    $failure = [
+        'ok'            => false,
+        'status'        => 0,
+        'body'          => '',
+        'effective_url' => $url,
+        'error'         => 'reader proxy disabled',
+        'headers'       => [],
+    ];
+    if (!READER_PROXY_ENABLED || !preg_match('#^https?://#i', $url)) {
+        return $failure;
+    }
+
+    $response = http_request('https://r.jina.ai/' . $url, [
+        'timeout'   => 30,
+        'max_bytes' => 8388608,
+        'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'headers'   => ['X-Return-Format: html'],
+    ]);
+
+    $body = (string) ($response['body'] ?? '');
+    $ok = $response['ok']
+        && (int) $response['status'] === 200
+        && $body !== ''
+        && !(strlen($body) < 2000 && stripos($body, 'Access Denied') !== false);
+
+    if (!$ok) {
+        app_log('info', 'Reader proxy failed', [
+            'url'    => $url,
+            'status' => (int) ($response['status'] ?? 0),
+            'error'  => (string) ($response['error'] ?? ''),
+        ]);
+        return [
+            'ok'            => false,
+            'status'        => (int) ($response['status'] ?? 0),
+            'body'          => $body,
+            'effective_url' => $url,
+            'error'         => (string) ($response['error'] ?? 'reader proxy failed'),
+            'headers'       => [],
+        ];
+    }
+
+    return [
+        'ok'            => true,
+        'status'        => 200,
+        'body'          => $body,
+        'effective_url' => $url,
+        'error'         => '',
+        'headers'       => is_array($response['headers'] ?? null) ? $response['headers'] : [],
+    ];
+}
+
+/**
  * Short-link domains that must be expanded even when they map to a known store,
  * because the landing page is not the product page.
  */

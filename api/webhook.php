@@ -108,6 +108,9 @@ if ($command === '/debug') {
         $lines[] = '• Collection products found: ' . count($expanded);
         foreach (array_slice($expandDebug['attempts'] ?? [], 0, 4) as $attempt) {
             $attemptLine = '   – HTTP ' . (int) ($attempt['status'] ?? 0) . ' · ' . (int) ($attempt['bytes'] ?? 0) . ' bytes';
+            if (!empty($attempt['via'])) {
+                $attemptLine .= ' · ' . telegram_escape((string) $attempt['via']);
+            }
             if (!empty($attempt['error'])) {
                 $attemptLine .= ' · ' . telegram_escape((string) $attempt['error']);
             }
@@ -492,7 +495,8 @@ foreach ($urls as $url) {
         if ($attempts) {
             $last = end($attempts);
             $detail = '🧪 HTTP ' . (int) ($last['status'] ?? 0)
-                . ' · ' . (int) ($last['bytes'] ?? 0) . " bytes\n";
+                . ' · ' . (int) ($last['bytes'] ?? 0) . ' bytes'
+                . (!empty($last['via']) ? ' · ' . $last['via'] : '') . "\n";
         }
         app_log('error', 'Telegram product listing failed', [
             'url'   => $url,

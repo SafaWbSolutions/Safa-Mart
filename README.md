@@ -226,6 +226,8 @@ Manual inputs:
 
 GitHub runners sit outside India, where Myntra and a few other stores serve a stripped page with **zero product links**. The workflow therefore sets `FETCH_PROXY_URL` to `<SITE_URL>/api/feed.php`; the scraper fetches merchant HTML through the web server (Indian IP) instead. The endpoint is protected by the `X-Safa-Secret` header, which must match `UPLOAD_API_SECRET`.
 
+When a merchant blocks the web server itself (Ajio answers `HTTP 403` to datacenter IPs), the bot retries the page through the `r.jina.ai` reader. Disable it with `'READER_PROXY_ENABLED' => false` in `config.local.php`.
+
 ### What the sync does
 
 1. Fetches `FEED_URLS`; if empty it uses Flipkart category pages defined in `automation/scraper.py`.

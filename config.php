@@ -151,7 +151,10 @@ safa_define('BLOCKED_PLATFORMS', ['Hamara Mall', 'HamaraMall']);
 safa_define('BLOCKED_DOMAINS', ['hamaramall']);
 
 safa_define('HTTP_TIMEOUT', max(5, min(30, (int) safa_config_value('HTTP_TIMEOUT', 15))));
-safa_define('USER_AGENT', trim((string) safa_config_value(
+// Jab merchant is server ka IP block karta hai (Ajio HTTP 403), tab pages
+// r.jina.ai reader ke through fetch hote hain. Off karna ho to
+// config.local.php me 'READER_PROXY_ENABLED' => false rakho.
+safa_define('READER_PROXY_ENABLED', safa_bool(safa_config_value('READER_PROXY_ENABLED', true)));safa_define('USER_AGENT', trim((string) safa_config_value(
     'USER_AGENT',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 )));
