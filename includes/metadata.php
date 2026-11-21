@@ -429,6 +429,25 @@ function affiliate_params_from_url(string $url): array
 }
 
 /**
+ * Build the simple Ajio search URL for a listing link.
+ */
+function ajio_simple_search_url(string $url): string
+{
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+    $text = trim((string) ($query['text'] ?? ''));
+    if ($text === '') {
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        $segments = array_values(array_filter(explode('/', $path)));
+        $slug = (string) end($segments);
+        $text = trim((string) preg_replace('/[^a-z0-9]+/i', ' ', $slug));
+    }
+    if ($text === '') {
+        return '';
+    }
+    return 'https://www.ajio.com/search/?text=' . rawurlencode($text);
+}
+
+/**
  * Expand a merchant collection/store page into individual product URLs.
  *
  * EarnKaro often shares collection links (for example a Shopsy seller store)
@@ -447,24 +466,8 @@ function expand_collection_url(string $url, int $limit = 2, array $affiliatePara
         return [];
     }
 
-    $response = http_request($url, [
-        'timeout'   => HTTP_TIMEOUT,
-        'max_bytes' => 6291456,
-        'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-        'referer'   => origin_of_url($url),
-    ]);
-    if (!$response['ok'] || (int) $response['status'] !== 200) {
-        return [];
-    }
-
-    $html = str_replace(['\\/', '\\u002F', '\\u002f', '&amp;'], ['/', '/', '/', '&'], (string) $response['body']);
-    if ($html === '') {
-        return [];
-    }
-    $base = (string) ($response['effective_url'] ?? $url);
-
     $found = [];
-    $add = static function (string $candidate) use (&$found, $base, $platform, $limit): void {
+    $add = static function (string $candidate, string $base) use (&$found, $platform, $limit): void {
         if (count($found) >= $limit) {
             return;
         }
@@ -485,22 +488,69 @@ function expand_collection_url(string $url, int $limit = 2, array $affiliatePara
         }
     };
 
-    if (preg_match_all('~https?://[^\s"\'<>\\\\]+~i', $html, $matches)) {
-        foreach ($matches[0] as $candidate) {
-            $add($candidate);
-            if (count($found) >= $limit) {
-                break;
+    $grab = static function (string $html, string $base) use ($add, &$found, $limit): void {
+        $html = str_replace(['\\/', '\\u002F', '\\u002f', '&amp;'], ['/', '/', '/', '&'], $html);
+        if ($html === '') {
+            return;
+        }
+        if (preg_match_all('~https?://[^\s"\'<>\\\\]+~i', $html, $matches)) {
+            foreach ($matches[0] as $candidate) {
+                $add($candidate, $base);
+                if (count($found) >= $limit) {
+                    return;
+                }
+            }
+        }
+        if (preg_match_all('~href\s*=\s*["\']([^"\']+)["\']~i', $html, $hrefs)) {
+            foreach ($hrefs[1] as $href) {
+                $add($href, $base);
+                if (count($found) >= $limit) {
+                    return;
+                }
+            }
+        }
+    };
+
+    $fetch = static function (string $target): string {
+        $response = http_request($target, [
+            'timeout'   => HTTP_TIMEOUT,
+            'max_bytes' => 6291456,
+            'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+            'referer'   => origin_of_url($target),
+        ]);
+        if (!$response['ok'] || (int) $response['status'] !== 200) {
+            app_log('info', 'Collection fetch failed', [
+                'url'    => $target,
+                'status' => (int) $response['status'],
+            ]);
+            return '';
+        }
+        return (string) $response['body'];
+    };
+
+    $html = $fetch($url);
+    if ($html !== '') {
+        $grab($html, $url);
+    }
+
+    // Ajio's long search URLs are rejected by its WAF from some hosts. Retry
+    // with the simple /search/?text= form the metadata fallback already uses.
+    if (!$found && $platform === 'Ajio') {
+        $simple = ajio_simple_search_url($url);
+        if ($simple !== '') {
+            $html = $fetch($simple);
+            if ($html !== '') {
+                $grab($html, $simple);
             }
         }
     }
-    if (count($found) < $limit && preg_match_all('~href\s*=\s*["\']([^"\']+)["\']~i', $html, $hrefs)) {
-        foreach ($hrefs[1] as $href) {
-            $add($href);
-            if (count($found) >= $limit) {
-                break;
-            }
-        }
-    }
+
+    app_log('info', 'Collection expansion', [
+        'url'      => $url,
+        'platform' => $platform,
+        'found'    => count($found),
+    ]);
+
     if (!$found) {
         return [];
     }
