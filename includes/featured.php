@@ -367,6 +367,32 @@ function attach_featured_badges(array $products): array
     return $products;
 }
 
+/**
+ * Move highlighted products to the front of the grid, keeping API order for
+ * everything else.
+ *
+ * @param list<array<string,mixed>> $products
+ * @return list<array<string,mixed>>
+ */
+function sort_featured_first(array $products): array
+{
+    $badges = featured_badges();
+    if (!$badges) {
+        return $products;
+    }
+    $first = [];
+    $rest = [];
+    foreach ($products as $product) {
+        $slug = strtolower((string) ($product['slug'] ?? ''));
+        if ($slug !== '' && isset($badges[$slug])) {
+            $first[] = $product;
+        } else {
+            $rest[] = $product;
+        }
+    }
+    return array_merge($first, $rest);
+}
+
 /** Human-friendly expiry line for Telegram replies. */
 function featured_until_label(string $until): string
 {

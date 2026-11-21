@@ -150,6 +150,20 @@ safa_define('PLATFORM_FILTERS', ['Flipkart', 'Myntra', 'Amazon', 'Ajio', 'Shopsy
 safa_define('FEATURED_MAX_ITEMS', max(1, min(24, (int) safa_config_value('FEATURED_MAX_ITEMS', 12))));
 safa_define('BEST_OFFER_MIN_DISCOUNT', max(0, min(95, (int) safa_config_value('BEST_OFFER_MIN_DISCOUNT', 40))));
 
+// Home hero carousel. Slides are built from the biggest live discounts.
+safa_define('HERO_CAROUSEL_ENABLED', safa_bool(safa_config_value('HERO_CAROUSEL_ENABLED', true)));
+safa_define('HERO_SLIDE_COUNT', max(2, min(8, (int) safa_config_value('HERO_SLIDE_COUNT', 5))));
+safa_define('HERO_AUTOPLAY_MS', max(3000, min(15000, (int) safa_config_value('HERO_AUTOPLAY_MS', 5500))));
+
+// Default product order on the home grid. One of: newest, price_asc,
+// price_desc, discount_desc, rating_desc.
+$safaHomeOrder = trim((string) safa_config_value('HOME_PRODUCT_ORDER', 'newest'));
+if (!in_array($safaHomeOrder, ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rating_desc'], true)) {
+    $safaHomeOrder = 'newest';
+}
+safa_define('HOME_PRODUCT_ORDER', $safaHomeOrder);
+unset($safaHomeOrder);
+
 // ---------------------------------------------------------------------------
 // Ads
 // ---------------------------------------------------------------------------

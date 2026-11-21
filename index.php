@@ -57,6 +57,46 @@ $configMissing = missing_config(['SUPABASE_URL', 'SUPABASE_ANON_KEY']);
 $spotlightProducts = $hasFilters ? [] : fetch_spotlight_products(8);
 $bestOfferProducts = $hasFilters ? [] : fetch_best_offer_products(12, BEST_OFFER_MIN_DISCOUNT);
 $products = attach_featured_badges($products);
+$products = sort_featured_first($products);
+$dbProductCount = count($products);
+
+// Highlighted products are pinned to the top of the home grid even when they
+// are older than the current page of newest products.
+if (!$hasFilters && $spotlightProducts) {
+    $gridSeen = [];
+    foreach ($products as $gridProduct) {
+        $gridSeen[(string) ($gridProduct['slug'] ?? '')] = true;
+    }
+    $pinned = [];
+    foreach ($spotlightProducts as $spotlightProduct) {
+        $spotlightSlug = (string) ($spotlightProduct['slug'] ?? '');
+        if ($spotlightSlug !== '' && !isset($gridSeen[$spotlightSlug])) {
+            $gridSeen[$spotlightSlug] = true;
+            $pinned[] = $spotlightProduct;
+        }
+    }
+    if ($pinned) {
+        $products = array_merge($pinned, $products);
+    }
+}
+
+$heroSlides = [];
+if (HERO_CAROUSEL_ENABLED && !$hasFilters) {
+    $heroSlides = array_slice($bestOfferProducts, 0, HERO_SLIDE_COUNT);
+}
+$heroPalettes = [
+    ['#1c1024', '#6d0d2c', '#e91e63'],
+    ['#0b1224', '#16307a', '#38bdf8'],
+    ['#170f2b', '#4c1d95', '#c084fc'],
+    ['#0b2018', '#065f46', '#34d399'],
+    ['#241004', '#9a3412', '#fdba74'],
+    ['#1b1026', '#881641', '#f472b6'],
+];
+$heroDefaultOrder = product_order_clause((string) HOME_PRODUCT_ORDER);
+$uiSort = $sort;
+if ($uiSort === '' && HOME_PRODUCT_ORDER !== 'newest') {
+    $uiSort = HOME_PRODUCT_ORDER;
+}
 
 $railMaxDiscount = 0;
 foreach ($bestOfferProducts as $railProduct) {
@@ -162,6 +202,8 @@ if (SUPABASE_URL !== '') {
             'table'       => SUPABASE_TABLE,
             'siteUrl'     => rtrim(site_url(), '/'),
             'pageSize'    => PRODUCTS_PER_PAGE,
+            'defaultOrder'=> $heroDefaultOrder,
+            'featuredBadges' => featured_badges(),
             'current'     => [
                 'q'            => $searchQuery,
                 'category'     => $category,
@@ -290,11 +332,11 @@ if (SUPABASE_URL !== '') {
             <label class="filter-field">
                 <span>Sort by</span>
                 <select name="sort">
-                    <option value="" <?= $sort === '' ? 'selected' : '' ?>>Newest first</option>
-                    <option value="price_asc" <?= $sort === 'price_asc' ? 'selected' : '' ?>>Price: low to high</option>
-                    <option value="price_desc" <?= $sort === 'price_desc' ? 'selected' : '' ?>>Price: high to low</option>
-                    <option value="discount_desc" <?= $sort === 'discount_desc' ? 'selected' : '' ?>>Biggest discount</option>
-                    <option value="rating_desc" <?= $sort === 'rating_desc' ? 'selected' : '' ?>>Top rated</option>
+                    <option value="" <?= $uiSort === '' ? 'selected' : '' ?>>Newest first</option>
+                    <option value="price_asc" <?= $uiSort === 'price_asc' ? 'selected' : '' ?>>Price: low to high</option>
+                    <option value="price_desc" <?= $uiSort === 'price_desc' ? 'selected' : '' ?>>Price: high to low</option>
+                    <option value="discount_desc" <?= $uiSort === 'discount_desc' ? 'selected' : '' ?>>Biggest discount</option>
+                    <option value="rating_desc" <?= $uiSort === 'rating_desc' ? 'selected' : '' ?>>Top rated</option>
                 </select>
             </label>
 
@@ -360,22 +402,105 @@ if (SUPABASE_URL !== '') {
     </details>
 
     <?php if (!$hasFilters): ?>
-        <section class="hero-banner" aria-label="Safa Mart highlights">
-            <div class="hero-copy">
-                <span class="hero-eyebrow"><span class="live-dot"></span> Trending on Safa Mart</span>
-                <h1>Big savings.<br><span>Zero guesswork.</span></h1>
-                <p>Handpicked products from your favourite stores — at prices worth talking about.</p>
-                <div class="hero-points">
-                    <span>✓ Local fast-loading images</span>
-                    <span>✓ Fresh deals every 4 hours</span>
+        <?php
+        $heroMaxDiscount = $railMaxDiscount > 0 ? $railMaxDiscount : 90;
+        $heroSlideTotal = 1 + count($heroSlides);
+        ?>
+        <section class="hero-carousel" data-hero-carousel
+                 data-autoplay="<?= (int) HERO_AUTOPLAY_MS ?>"
+                 aria-roledescription="carousel"
+                 aria-label="Today's top deals">
+            <div class="hero-track">
+                <article class="hero-slide is-active" data-slide aria-hidden="false"
+                         style="--hero-a:#1c1024;--hero-b:#6d0d2c;--hero-c:#e91e63">
+                    <div class="hero-slide-copy">
+                        <span class="hero-eyebrow"><span class="live-dot"></span> Trending on Safa Mart</span>
+                        <h1>Big savings.<br><span>Zero guesswork.</span></h1>
+                        <p>Handpicked products from your favourite stores — at prices worth talking about.</p>
+                        <div class="hero-points">
+                            <span>✓ Local fast-loading images</span>
+                            <span>✓ Fresh deals every 4 hours</span>
+                        </div>
+                    </div>
+                    <div class="hero-slide-art" aria-hidden="true">
+                        <span class="hero-orb hero-orb-a"></span>
+                        <span class="hero-orb hero-orb-b"></span>
+                        <div class="hero-deal-card">
+                            <span class="hero-deal-label">TODAY'S PICKS</span>
+                            <strong>Up to <?= (int) $heroMaxDiscount ?>% off</strong>
+                            <span class="hero-deal-line"></span>
+                            <span class="hero-deal-meta">Fashion · Beauty · Home</span>
+                        </div>
+                    </div>
+                </article>
+
+                <?php foreach ($heroSlides as $heroIndex => $heroProduct): ?>
+                    <?php
+                    $heroPalette = $heroPalettes[$heroIndex % count($heroPalettes)];
+                    $heroTitle = clean_product_title((string) ($heroProduct['title'] ?? 'Product'));
+                    $heroPrice = (float) ($heroProduct['price'] ?? 0);
+                    $heroMrp = (float) ($heroProduct['mrp'] ?? 0);
+                    $heroDiscount = (int) ($heroProduct['discount_percent'] ?? 0);
+                    if ($heroDiscount <= 0) {
+                        $heroDiscount = calculate_discount($heroMrp, $heroPrice);
+                    }
+                    $heroSaving = max(0, (float) round($heroMrp - $heroPrice));
+                    $heroPlatform = clean_text((string) ($heroProduct['source_platform'] ?? 'Store'));
+                    $heroImage = (string) ($heroProduct['thumbnail_url'] ?? '');
+                    if (!preg_match('#^https?://#i', $heroImage)) {
+                        $heroImage = '';
+                    }
+                    $heroUrl = site_url('product.php?slug=' . rawurlencode((string) ($heroProduct['slug'] ?? '')));
+                    ?>
+                    <article class="hero-slide" data-slide aria-hidden="true"
+                             style="--hero-a:<?= e($heroPalette[0]) ?>;--hero-b:<?= e($heroPalette[1]) ?>;--hero-c:<?= e($heroPalette[2]) ?>">
+                        <div class="hero-slide-copy">
+                            <span class="hero-eyebrow"><span class="live-dot"></span> Deal <?= $heroIndex + 1 ?> · <?= e($heroPlatform) ?></span>
+                            <span class="hero-offer"><?= $heroDiscount > 0 ? $heroDiscount . '% OFF' : 'Limited deal' ?></span>
+                            <h2 class="hero-slide-title"><?= e($heroTitle) ?></h2>
+                            <div class="hero-slide-price">
+                                <strong><?= $heroPrice > 0 ? e(inr($heroPrice)) : 'Check price' ?></strong>
+                                <?php if ($heroMrp > $heroPrice && $heroPrice > 0): ?>
+                                    <s><?= e(inr($heroMrp)) ?></s>
+                                <?php endif; ?>
+                                <?php if ($heroSaving > 0): ?>
+                                    <em>Save <?= e(inr($heroSaving)) ?></em>
+                                <?php endif; ?>
+                            </div>
+                            <a class="hero-slide-cta" href="<?= e($heroUrl) ?>" tabindex="-1">
+                                Grab this deal
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+                            </a>
+                        </div>
+                        <div class="hero-slide-art" aria-hidden="true">
+                            <span class="hero-orb hero-orb-a"></span>
+                            <span class="hero-orb hero-orb-b"></span>
+                            <?php if ($heroImage !== ''): ?>
+                                <img src="<?= e($heroImage) ?>" alt="" loading="<?= $heroIndex === 0 ? 'eager' : 'lazy' ?>" decoding="async">
+                            <?php else: ?>
+                                <span class="hero-art-placeholder">🛍️</span>
+                            <?php endif; ?>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if ($heroSlideTotal > 1): ?>
+                <button type="button" class="hero-nav hero-nav-prev" data-hero-prev aria-label="Previous deal">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button type="button" class="hero-nav hero-nav-next" data-hero-next aria-label="Next deal">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+                <div class="hero-dots" data-hero-dots role="tablist" aria-label="Choose a deal">
+                    <?php for ($dot = 0; $dot < $heroSlideTotal; $dot++): ?>
+                        <button type="button" class="hero-dot <?= $dot === 0 ? 'is-active' : '' ?>"
+                                data-hero-dot="<?= $dot ?>" role="tab"
+                                aria-label="Show slide <?= $dot + 1 ?>"
+                                aria-selected="<?= $dot === 0 ? 'true' : 'false' ?>"></button>
+                    <?php endfor; ?>
                 </div>
-            </div>
-            <div class="hero-deal-card" aria-hidden="true">
-                <span class="hero-deal-label">TODAY'S PICKS</span>
-                <strong>Up to 90% off</strong>
-                <span class="hero-deal-line"></span>
-                <span class="hero-deal-meta">Fashion · Beauty · Home</span>
-            </div>
+            <?php endif; ?>
         </section>
     <?php endif; ?>
 
@@ -481,7 +606,7 @@ if (SUPABASE_URL !== '') {
         <?php endif; ?>
 
         <div class="product-grid" id="productGrid"
-             data-offset="<?= count($products) ?>"
+             data-offset="<?= (int) $dbProductCount ?>"
              data-has-more="<?= $hasMore ? '1' : '0' ?>"
              data-initial-count="<?= count($products) ?>">
             <?php foreach ($products as $product): ?>

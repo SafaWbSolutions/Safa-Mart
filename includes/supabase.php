@@ -217,6 +217,20 @@ function supabase_rpc(string $function, array $params = [], bool $service = fals
  * @param array{q?:string,category?:string,platform?:string,offset?:int,sort?:string,min_price?:float,max_price?:float,min_discount?:int,brand?:string,min_rating?:float} $filters
  * @return list<array<string,mixed>>
  */
+/**
+ * Map a UI sort key (or HOME_PRODUCT_ORDER) to a PostgREST order clause.
+ */
+function product_order_clause(string $sort): string
+{
+    return match ($sort) {
+        'price_asc'     => 'price.asc',
+        'price_desc'    => 'price.desc',
+        'discount_desc' => 'discount_percent.desc',
+        'rating_desc'   => 'rating.desc',
+        default         => 'created_at.desc',
+    };
+}
+
 function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PER_PAGE): array
 {
     if (!supabase_is_configured()) {
@@ -227,13 +241,10 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
     $offset = max(0, (int) ($filters['offset'] ?? 0));
 
     $sort = (string) ($filters['sort'] ?? '');
-    $order = match ($sort) {
-        'price_asc'     => 'price.asc',
-        'price_desc'    => 'price.desc',
-        'discount_desc' => 'discount_percent.desc',
-        'rating_desc'   => 'rating.desc',
-        default         => 'created_at.desc',
-    };
+    if ($sort === '') {
+        $sort = defined('HOME_PRODUCT_ORDER') ? (string) HOME_PRODUCT_ORDER : 'newest';
+    }
+    $order = product_order_clause($sort);
 
     $query = 'select=*&is_active=eq.true&order=' . $order . '&limit=' . $limit . '&offset=' . $offset;
 

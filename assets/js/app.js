@@ -164,6 +164,10 @@
         var discountHtml = discount > 0
             ? '<span class="discount-pill">' + discount + '% OFF</span>'
             : '';
+        var featured = (cfg.featuredBadges || {})[slug] || '';
+        var featuredHtml = featured
+            ? '<span class="card-featured">⭐ ' + escapeHtml(String(featured)) + '</span>'
+            : '';
         var mrpHtml = (mrp > price && price > 0)
             ? '<span class="price-mrp">' + formatINR(mrp) + '</span>'
             : '';
@@ -172,6 +176,7 @@
             + '<a class="product-media" href="' + escapeHtml(productUrl) + '" aria-label="' + escapeHtml(title) + '">'
             + media
             + discountHtml
+            + featuredHtml
             + '<span class="platform-badge platform-' + escapeHtml(platformClass(platform)) + '">' + escapeHtml(platform) + '</span>'
             + '</a>'
             + '<div class="product-body">'
@@ -305,7 +310,7 @@
         var params = new URLSearchParams();
         params.set('select', '*');
         params.set('is_active', 'eq.true');
-        var order = 'created_at.desc';
+        var order = cfg.defaultOrder || 'created_at.desc';
         if (state.sort === 'price_asc') {
             order = 'price.asc';
         } else if (state.sort === 'price_desc') {
@@ -417,11 +422,25 @@
             if (reset) {
                 grid.innerHTML = '';
             }
-            var html = data.map(productCard).join('');
+            // Highlighted products float to the top of the first page, so the
+            // same product can arrive again later. Never show a card twice.
+            var seenIds = {};
+            Array.prototype.forEach.call(grid.querySelectorAll('.product-card'), function (card) {
+                seenIds[String(card.getAttribute('data-product-id') || '')] = true;
+            });
+            var fresh = data.filter(function (product) {
+                var id = String(Number(product && product.id) || 0);
+                if (id === '0' || seenIds[id]) {
+                    return false;
+                }
+                seenIds[id] = true;
+                return true;
+            });
+            var html = fresh.map(productCard).join('');
             grid.insertAdjacentHTML('beforeend', html);
 
             state.offset += data.length;
-            state.loaded += data.length;
+            state.loaded += fresh.length;
             state.hasMore = data.length >= pageSize;
 
             if (state.loaded === 0) {
@@ -682,6 +701,126 @@
         rail.addEventListener('scroll', sync, { passive: true });
         window.addEventListener('resize', sync);
         sync();
+    });
+
+    /* ---------- Home hero carousel ---------- */
+    $all('[data-hero-carousel]').forEach(function (root) {
+        var slides = Array.prototype.slice.call(root.querySelectorAll('[data-slide]'));
+        if (slides.length < 2) {
+            return;
+        }
+        var dots = Array.prototype.slice.call(root.querySelectorAll('[data-hero-dot]'));
+        var prevBtn = root.querySelector('[data-hero-prev]');
+        var nextBtn = root.querySelector('[data-hero-next]');
+        var track = root.querySelector('.hero-track');
+        var index = 0;
+        var timer = null;
+        var delay = Math.max(3000, Number(root.getAttribute('data-autoplay')) || 5500);
+        var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function render() {
+            slides.forEach(function (slide, i) {
+                var active = i === index;
+                slide.classList.toggle('is-active', active);
+                slide.classList.toggle('is-prev', i === (index - 1 + slides.length) % slides.length);
+                slide.classList.toggle('is-next', i === (index + 1) % slides.length);
+                slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+                Array.prototype.forEach.call(slide.querySelectorAll('a'), function (link) {
+                    link.tabIndex = active ? 0 : -1;
+                });
+            });
+            dots.forEach(function (dot, i) {
+                dot.classList.toggle('is-active', i === index);
+                dot.setAttribute('aria-selected', i === index ? 'true' : 'false');
+            });
+        }
+
+        function go(next) {
+            index = (next + slides.length) % slides.length;
+            render();
+        }
+
+        function stop() {
+            window.clearInterval(timer);
+            timer = null;
+        }
+
+        function start() {
+            stop();
+            if (reduceMotion || document.hidden) {
+                return;
+            }
+            timer = window.setInterval(function () {
+                go(index + 1);
+            }, delay);
+        }
+
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function () {
+                go(index - 1);
+                start();
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function () {
+                go(index + 1);
+                start();
+            });
+        }
+        dots.forEach(function (dot) {
+            dot.addEventListener('click', function () {
+                go(Number(dot.getAttribute('data-hero-dot')) || 0);
+                start();
+            });
+        });
+
+        root.addEventListener('mouseenter', stop);
+        root.addEventListener('mouseleave', start);
+        root.addEventListener('focusin', stop);
+        root.addEventListener('focusout', function (event) {
+            if (!root.contains(event.relatedTarget)) {
+                start();
+            }
+        });
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                stop();
+            } else {
+                start();
+            }
+        });
+
+        if (track) {
+            var startX = 0;
+            var startY = 0;
+            var tracking = false;
+            track.addEventListener('pointerdown', function (event) {
+                if (event.pointerType === 'mouse') {
+                    return;
+                }
+                tracking = true;
+                startX = event.clientX;
+                startY = event.clientY;
+            });
+            track.addEventListener('pointerup', function (event) {
+                if (!tracking) {
+                    return;
+                }
+                tracking = false;
+                var dx = event.clientX - startX;
+                var dy = event.clientY - startY;
+                if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+                    go(dx < 0 ? index + 1 : index - 1);
+                    start();
+                }
+            });
+            track.addEventListener('pointercancel', function () {
+                tracking = false;
+            });
+        }
+
+        render();
+        start();
     });
 
     /* ---------- Small UX niceties ---------- */

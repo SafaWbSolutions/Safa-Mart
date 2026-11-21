@@ -68,7 +68,64 @@ Data yahan rehta hai: `uploads/featured.json`
 
 ---
 
-## 2. Best offers rail
+## 2. Hero carousel (3D deal slider)
+
+Home page ka bada banner ab auto-changing 3D carousel hai:
+
+- Slide 1: brand intro ("Big savings. Zero guesswork.")
+- Slide 2+: har slide me **top-discount product** ka offer — `% OFF`, title, price,
+  MRP, "Save ₹X" aur "Grab this deal" button.
+- 5.5 second me apne aap badalta hai, arrows + dots se control, mobile pe swipe.
+- Hover/focus karne par pause ho jata hai.
+
+Control `config.local.php` me:
+
+```php
+'HERO_CAROUSEL_ENABLED' => true,
+'HERO_SLIDE_COUNT'      => 5,     // 2–8 product slides
+'HERO_AUTOPLAY_MS'      => 5500,  // 3–15 second
+```
+
+Slides automatically sabse zyada discount wale products se bante hain, isliye
+alag-alag products aur offers apne aap rotate hote rehte hain.
+
+---
+
+## 3. Product order (kaun sa product pehle dikhe)
+
+### Highlight = top of grid
+Jo product highlight hota hai (`/highlight`) wo:
+
+1. Home ke **Spotlight** section me aata hai,
+2. Grid me **sabse pehle** (pinned) dikhta hai, chahe wo purana product ho,
+3. Purple `⭐ Brand Deal` badge ke saath.
+
+### Default order badalna
+
+`config.local.php`:
+
+```php
+'HOME_PRODUCT_ORDER' => 'newest',
+```
+
+Allowed values:
+
+| Value | Order |
+|---|---|
+| `newest` | Naye products pehle (default) |
+| `discount_desc` | Sabse zyada discount pehle |
+| `price_asc` | Sasta pehle |
+| `price_desc` | Mehnga pehle |
+| `rating_desc` | Top rated pehle |
+
+User chahe to site ke **Filters & sort** dropdown se apna order chun sakta hai
+(wo config ko override karta hai).
+
+Grid me per page kitne products: `PRODUCTS_PER_PAGE` (default 24).
+
+---
+
+## 4. Best offers rail
 
 Home page par har waqt top-discount products ka Flipkart-style rail dikhta hai.
 
@@ -84,7 +141,7 @@ Home page par har waqt top-discount products ka Flipkart-style rail dikhta hai.
 
 ---
 
-## 3. Ads lagana (future-ready)
+## 5. Ads lagana (future-ready)
 
 Ad slots pehle se reserved hain, isliye ads on karne par layout jump nahi hoga.
 
@@ -163,7 +220,7 @@ Preview sirf usi visitor ko dikhta hai; normal users ko khali slots nahi dikhte.
 
 ---
 
-## 4. Naya product add karte hi kya hota hai
+## 6. Naya product add karte hi kya hota hai
 
 - Telegram bot product publish karta hai → normal grid me aata hai.
 - Agar usko highlight karna hai to turant `/highlight <slug> 7 Brand Deal` bhej do.
@@ -171,7 +228,7 @@ Preview sirf usi visitor ko dikhta hai; normal users ko khali slots nahi dikhte.
 
 ---
 
-## 5. Files
+## 7. Files
 
 | File | Kaam |
 |---|---|
