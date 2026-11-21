@@ -32,7 +32,7 @@ AddDefaultCharset UTF-8
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     # Telegram and the upload endpoint must never be cached by a proxy.
-    <FilesMatch "^(webhook|upload)\.php$">
+    <FilesMatch "^(webhook|upload|feed)\.php$">
         Header always set Cache-Control "no-store, max-age=0"
     </FilesMatch>
 </IfModule>

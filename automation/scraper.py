@@ -503,7 +503,58 @@ def read_limited(response: requests.Response, limit: int) -> bytes:
     return b"".join(chunks)
 
 
+FETCH_PROXY_URL = os.getenv("FETCH_PROXY_URL", "").strip()
+FETCH_PROXY_SECRET = (
+    os.getenv("FETCH_PROXY_SECRET") or os.getenv("UPLOAD_API_SECRET") or ""
+).strip()
+
+
+def fetch_html_via_proxy(url: str) -> Optional[tuple[str, int, str]]:
+    """
+    Fetch merchant HTML through the web server (Indian IP) when configured.
+
+    GitHub Actions runners are outside India and Myntra serves them a stripped
+    page with no product links. Routing the request through safamart.bis24.in
+    makes the response identical to what the bot itself sees.
+    """
+    if not FETCH_PROXY_URL or not FETCH_PROXY_SECRET:
+        return None
+    try:
+        response = requests.post(
+            FETCH_PROXY_URL,
+            json={"url": url},
+            headers={
+                "X-Safa-Secret": FETCH_PROXY_SECRET,
+                "Accept": "application/json",
+            },
+            timeout=(10, 60),
+        )
+    except requests.RequestException as error:
+        LOGGER.warning("Fetch proxy request failed for %s: %s", url, error)
+        return None
+    if response.status_code >= 400:
+        LOGGER.warning("Fetch proxy rejected %s with HTTP %s", url, response.status_code)
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        LOGGER.warning("Fetch proxy returned invalid JSON for %s", url)
+        return None
+
+    status = int(payload.get("status") or 0)
+    body = payload.get("body") or ""
+    effective = payload.get("effective_url") or url
+    if not payload.get("ok") or status >= 400 or not body:
+        LOGGER.warning("Fetch proxy could not load %s (HTTP %s)", url, status)
+        return "", status, effective
+    return str(body), status, str(effective)
+
+
 def fetch_html(session: requests.Session, url: str) -> tuple[str, int, str]:
+    proxied = fetch_html_via_proxy(url)
+    if proxied is not None:
+        return proxied
+
     response = safe_get(session, url)
     status = response.status_code
     final_url = response.url

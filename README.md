@@ -222,6 +222,10 @@ Manual inputs:
 - `max_products` — default `60`
 - `skip_stock_check` — default `false`
 
+### India fetch proxy
+
+GitHub runners sit outside India, where Myntra and a few other stores serve a stripped page with **zero product links**. The workflow therefore sets `FETCH_PROXY_URL` to `<SITE_URL>/api/feed.php`; the scraper fetches merchant HTML through the web server (Indian IP) instead. The endpoint is protected by the `X-Safa-Secret` header, which must match `UPLOAD_API_SECRET`.
+
 ### What the sync does
 
 1. Fetches `FEED_URLS`; if empty it uses Flipkart category pages defined in `automation/scraper.py`.
