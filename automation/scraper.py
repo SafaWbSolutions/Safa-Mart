@@ -199,8 +199,15 @@ def clean_title(value: Any) -> str:
     )
     cleaned = re.sub(r"\s*[-–—|]\s*Buy\b.*\bOnline\b.*$", "", cleaned, flags=re.I)
     cleaned = re.sub(r"\s+Online at Best Prices?\b.*$", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"\s+Price in India\b.*$", "", cleaned, flags=re.I)
     cleaned = re.sub(
         r"\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$",
+        "",
+        cleaned,
+        flags=re.I,
+    )
+    cleaned = re.sub(
+        r"\s+(?:online\s+)?at\s+(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)(?:\.(?:com|in))?\s*$",
         "",
         cleaned,
         flags=re.I,

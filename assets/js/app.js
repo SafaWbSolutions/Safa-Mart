@@ -65,7 +65,9 @@
             .replace(/^(?:Amazon(?:\.in)?|Flipkart|Myntra|Ajio|Shopsy|DigiHaat)\s*[:\-–—|]\s*/i, '')
             .replace(/\s*[-–—|]\s*Buy\b.*\bOnline\b.*$/i, '')
             .replace(/\s+Online at Best Prices?\b.*$/i, '')
+            .replace(/\s+Price in India\b.*$/i, '')
             .replace(/\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$/i, '')
+            .replace(/\s+(?:online\s+)?at\s+(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)(?:\.(?:com|in))?\s*$/i, '')
             .replace(/^Buy\s+(?=[A-Z0-9])/, '')
             .replace(/^[\s\-–—|,]+|[\s\-–—|,]+$/g, '')
             .trim();
