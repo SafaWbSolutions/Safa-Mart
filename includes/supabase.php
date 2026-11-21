@@ -432,23 +432,42 @@ function fetch_related_products(string $category, int $excludeId, int $limit = 8
     if (!supabase_is_configured()) {
         return [];
     }
-    $limit = max(1, min(12, $limit));
-    $query = 'select=*&is_active=eq.true&id=neq.' . max(0, $excludeId)
-        . '&order=clicks.desc,created_at.desc&limit=' . $limit;
+
+    $limit = max(4, min(12, $limit));
+    $excludeId = max(0, $excludeId);
+    $out = [];
+    $seen = $excludeId > 0 ? [$excludeId => true] : [];
+
+    $collect = static function (array $rows) use (&$out, &$seen, $limit): void {
+        foreach ($rows as $row) {
+            if (count($out) >= $limit) {
+                return;
+            }
+            $rowId = (int) ($row['id'] ?? 0);
+            if ($rowId < 1 || isset($seen[$rowId])) {
+                continue;
+            }
+            $seen[$rowId] = true;
+            $out[] = $row;
+        }
+    };
+
+    // 1) Same category first.
     if ($category !== '' && in_array($category, PRODUCT_CATEGORIES, true)) {
-        $query .= '&category=eq.' . rawurlencode($category);
+        $collect(fetch_storefront_products(['category' => $category], $limit + 2));
     }
-    $result = supabase_request('GET', supabase_table() . '?' . $query . storefront_exclusion_query());
-    if (!$result['ok']) {
-        $result = supabase_request('GET', supabase_table() . '?' . $query);
+
+    // 2) Fill with the biggest live discounts from other categories.
+    if (count($out) < $limit) {
+        $collect(fetch_storefront_products(['sort' => 'discount_desc'], 24));
     }
-    if (!$result['ok'] || !is_array($result['data'])) {
-        return [];
+
+    // 3) Last resort: newest products.
+    if (count($out) < $limit) {
+        $collect(fetch_storefront_products([], 24));
     }
-    $rows = array_values(array_filter($result['data'], 'is_array'));
-    return array_values(array_filter($rows, static function (array $product): bool {
-        return !is_blocked_product($product);
-    }));
+
+    return array_slice($out, 0, $limit);
 }
 
 /* -------------------------------------------------------------------------

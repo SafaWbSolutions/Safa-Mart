@@ -51,34 +51,9 @@ function render_landing_header(string $activeStore = '', string $topNote = ''): 
 
 function render_landing_footer(): void
 {
-    ?>
-    <footer class="site-footer">
-        <div class="site-container footer-bottom">
-            <span>© <?= date('Y') ?> <?= e(APP_NAME) ?>. All rights reserved.</span>
-            <span>Made for smart shoppers in India.</span>
-            <div class="made-by-credit">
-                <span class="indian-flag" role="img" aria-label="Indian flag" title="India">
-                    <svg viewBox="0 0 30 20" width="26" height="18" aria-hidden="true" focusable="false">
-                        <defs><clipPath id="creditFlagClip"><rect width="30" height="20" rx="3"/></clipPath></defs>
-                        <g clip-path="url(#creditFlagClip)">
-                            <rect width="30" height="6.67" fill="#FF9933"/>
-                            <rect y="6.67" width="30" height="6.66" fill="#FFFFFF"/>
-                            <rect y="13.33" width="30" height="6.67" fill="#138808"/>
-                            <circle cx="15" cy="10" r="2.9" fill="none" stroke="#000080" stroke-width="0.9"/>
-                            <circle cx="15" cy="10" r="0.7" fill="#000080"/>
-                        </g>
-                    </svg>
-                </span>
-                <span class="made-by-text">
-                    <span class="made-by-label">Made by</span>
-                    <span class="made-by-name">Safa Web Solutions</span>
-                </span>
-                <span class="credit-divider" aria-hidden="true"></span>
-                <span class="made-in-india">Made in India</span>
-            </div>
-        </div>
-    </footer>
-    <?php require __DIR__ . '/telegram_button.php'; ?>
-    <?php require __DIR__ . '/telegram_popup.php'; ?>
-    <?php
+    if (function_exists('render_site_footer')) {
+        render_site_footer();
+    }
+    require __DIR__ . '/telegram_button.php';
+    require __DIR__ . '/telegram_popup.php';
 }

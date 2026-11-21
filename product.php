@@ -798,12 +798,7 @@ $faqSchema = [
     </a>
 </div>
 
-<footer class="site-footer product-footer">
-    <div class="site-container footer-bottom">
-        <span>© <?= date('Y') ?> <?= e(APP_NAME) ?>. Affiliate links may earn us a commission.</span>
-        <a href="<?= e(site_url('index.php')) ?>">Browse all deals</a>
-    </div>
-</footer>
+<?php render_site_footer(); ?>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <?php require __DIR__ . '/includes/telegram_button.php'; ?>
@@ -824,8 +819,8 @@ function render_product_not_found(): void
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex,follow">
         <title><?= e($title) ?></title>
-        <script src="https://cdn.tailwindcss.com"></script>
         <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
+        <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
     </head>
     <body class="not-found-page">
     <main class="not-found-card">
@@ -835,7 +830,15 @@ function render_product_not_found(): void
         <h1>This deal has moved on</h1>
         <p>The product may have sold out or the link may be incorrect. Explore today's live deals instead.</p>
         <a class="primary-buy not-found-action" href="<?= e(site_url('index.php')) ?>">Browse live deals</a>
+        <div class="browse-link-grid not-found-links">
+            <a class="category-chip" href="<?= e(site_url('deals/fashion')) ?>">Fashion deals</a>
+            <a class="category-chip" href="<?= e(site_url('deals/electronics')) ?>">Electronics deals</a>
+            <a class="category-chip" href="<?= e(site_url('deals/under-499')) ?>">Under ₹499</a>
+            <a class="category-chip" href="<?= e(site_url('store/myntra')) ?>">Myntra deals</a>
+            <a class="category-chip" href="<?= e(site_url('price-drops')) ?>">🔥 Price drops</a>
+        </div>
     </main>
+    <?php render_site_footer(); ?>
     </body>
     </html>
     <?php

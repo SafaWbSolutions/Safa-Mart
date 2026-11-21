@@ -31,6 +31,11 @@ $pageUrl = site_url('guides/' . $guide['slug']);
 $pageTitle = $guide['title'];
 $metaDescription = truncate_text($guide['description'], 158);
 $products = fetch_storefront_products($guide['filters'], 12);
+$guideFallback = false;
+if (!$products) {
+    $products = fetch_storefront_products(['sort' => 'discount_desc'], 12);
+    $guideFallback = true;
+}
 $products = attach_featured_badges($products);
 $origin = rtrim(site_url(), '/');
 
@@ -136,6 +141,13 @@ $relatedGuides = array_filter($guides, static function (array $item) use ($slug)
         </header>
 
         <?= ad_slot('browse-top') ?>
+
+        <?php if ($guideFallback): ?>
+            <div class="notice-card">
+                <strong>No exact matches for this guide right now.</strong>
+                <p>Prices and stock change quickly. Here are today's top live deals while fresh listings arrive.</p>
+            </div>
+        <?php endif; ?>
 
         <?php if ($products): ?>
             <section class="guide-picks" aria-labelledby="guidePicksHeading">

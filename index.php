@@ -698,66 +698,9 @@ if (SUPABASE_URL !== '') {
     <?php endif; ?>
 </main>
 
-<footer class="site-footer">
-    <div class="site-container footer-grid">
-        <div class="footer-brand">
-            <a class="brand brand-footer" href="<?= e(site_url('index.php')) ?>">
-                <span class="brand-mark" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9">
-                        <path d="M5.5 8.5h13l-1.1 11H6.6l-1.1-11Z"/><path d="M9 8.5a3 3 0 0 1 6 0"/>
-                    </svg>
-                </span>
-                <span class="brand-text">Safa<span>Mart</span></span>
-            </a>
-            <p>Smart deals from India's favourite shopping destinations. We track prices so you don't have to.</p>
-        </div>
-        <div class="footer-links">
-            <h3>Shop by category</h3>
-            <?php foreach (PRODUCT_CATEGORIES as $cat): ?>
-                <?php $footerCatSlug = seo_category_catalog()[$cat]['slug'] ?? ''; ?>
-                <a href="<?= e($footerCatSlug !== '' ? site_url('deals/' . $footerCatSlug) : $buildUrl(['category' => $cat])) ?>"><?= e($cat) ?></a>
-            <?php endforeach; ?>
-        </div>
-        <div class="footer-links">
-            <h3>Top stores</h3>
-            <?php foreach (PLATFORM_FILTERS as $store): ?>
-                <?php $footerStoreSlug = seo_store_catalog()[$store]['slug'] ?? ''; ?>
-                <a href="<?= e($footerStoreSlug !== '' ? site_url('store/' . $footerStoreSlug) : $buildUrl(['platform' => $store])) ?>"><?= e($store) ?> deals</a>
-            <?php endforeach; ?>
-        </div>
-        <div class="footer-disclosure">
-            <h3>Affiliate disclosure</h3>
-            <p>As an affiliate partner, <?= e(APP_NAME) ?> may earn a small commission when you buy through our links. The price you pay does not change.</p>
-            <p class="footer-small">Prices and availability are set by the merchant and can change without notice. Always confirm on the merchant's page.</p>
-        </div>
-    </div>
-    <div class="site-container footer-bottom">
-        <span>© <?= date('Y') ?> <?= e(APP_NAME) ?>. All rights reserved.</span>
-        <span>Made for smart shoppers in India.</span>
-        <div class="made-by-credit">
-            <span class="indian-flag" role="img" aria-label="Indian flag" title="India">
-                <svg viewBox="0 0 30 20" width="26" height="18" aria-hidden="true" focusable="false">
-                    <defs>
-                        <clipPath id="creditFlagClip"><rect width="30" height="20" rx="3"/></clipPath>
-                    </defs>
-                    <g clip-path="url(#creditFlagClip)">
-                        <rect width="30" height="6.67" fill="#FF9933"/>
-                        <rect y="6.67" width="30" height="6.66" fill="#FFFFFF"/>
-                        <rect y="13.33" width="30" height="6.67" fill="#138808"/>
-                        <circle cx="15" cy="10" r="2.9" fill="none" stroke="#000080" stroke-width="0.9"/>
-                        <circle cx="15" cy="10" r="0.7" fill="#000080"/>
-                    </g>
-                </svg>
-            </span>
-            <span class="made-by-text">
-                <span class="made-by-label">Made by</span>
-                <span class="made-by-name">Safa Web Solutions</span>
-            </span>
-            <span class="credit-divider" aria-hidden="true"></span>
-            <span class="made-in-india">Made in India</span>
-        </div>
-    </div>
-</footer>
+<?php render_site_footer(); ?>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <?php require __DIR__ . '/includes/telegram_button.php'; ?>

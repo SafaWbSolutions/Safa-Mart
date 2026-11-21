@@ -255,3 +255,4 @@ require_once __DIR__ . '/includes/ads.php';
 require_once __DIR__ . '/includes/seo.php';
 require_once __DIR__ . '/includes/guides.php';
 require_once __DIR__ . '/includes/events.php';
+require_once __DIR__ . '/includes/footer.php';
