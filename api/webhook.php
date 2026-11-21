@@ -66,6 +66,7 @@ if ($command === '/start' || $command === '/help') {
         . "/highlight &lt;slug|id&gt; [days] [badge] – spotlight a product on the home page\n"
         . "/unhighlight &lt;slug|id&gt; – remove a spotlight\n"
         . "/highlights – list current spotlights\n"
+        . "/indexnow – ping Bing/Yandex for instant indexing\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
     json_response(['ok' => true, 'command' => $command]);
@@ -419,6 +420,41 @@ if ($command === '/highlights') {
     telegram_send_message($chatId, implode("\n", $lines));
     json_response(['ok' => true, 'command' => '/highlights']);
 }
+if ($command === '/indexnow') {
+    $urlsToPing = [site_url('index.php')];
+    foreach (seo_category_catalog() as $catMeta) {
+        $urlsToPing[] = site_url('deals/' . $catMeta['slug']);
+    }
+    foreach (seo_store_catalog() as $storeMeta) {
+        $urlsToPing[] = site_url('store/' . $storeMeta['slug']);
+    }
+
+    $recent = supabase_request(
+        'GET',
+        supabase_table() . '?select=slug&is_active=eq.true&order=created_at.desc&limit=100',
+        null,
+        ['service' => true, 'timeout' => 20]
+    );
+    if ($recent['ok'] && is_array($recent['data'])) {
+        foreach ($recent['data'] as $row) {
+            $rowSlug = (string) ($row['slug'] ?? '');
+            if ($rowSlug !== '') {
+                $urlsToPing[] = site_url('product.php?slug=' . rawurlencode($rowSlug));
+            }
+        }
+    }
+
+    $ping = seo_indexnow_ping($urlsToPing);
+    telegram_send_message(
+        $chatId,
+        $ping['ok']
+            ? '⚡ <b>IndexNow ping sent</b>' . "\n"
+                . '• URLs: ' . (int) $ping['submitted'] . "\n"
+                . '• Bing/Yandex will crawl them shortly.'
+            : '❌ IndexNow failed (HTTP ' . (int) $ping['status'] . '): ' . telegram_escape($ping['error'])
+    );
+    json_response(['ok' => true, 'command' => '/indexnow', 'ping' => $ping]);
+}
 if ($command === '/id') {
     $userId = (string) ($message['from']['id'] ?? 'unknown');
     telegram_send_message($chatId, "Chat ID: <code>" . telegram_escape($chatId) . "</code>\nUser ID: <code>" . telegram_escape($userId) . '</code>');
@@ -523,6 +559,7 @@ telegram_send_message($chatId, '⏳ Processing ' . count($urls) . ' product' . (
 $listed = 0;
 $failed = 0;
 $seen = [];
+$listedUrls = [];
 
 foreach ($urls as $url) {
     if (microtime(true) >= $deadline) {
@@ -663,6 +700,7 @@ foreach ($urls as $url) {
         }
 
         $listed++;
+        $listedUrls[] = site_url('product.php?slug=' . rawurlencode($slug));
         $priceLabel = $price > 0 ? '₹' . inr_plain($price) : 'Price on request';
         $confirmation = '✅ <b>Listed:</b> ' . telegram_escape(truncate_text($metadataTitle, 120))
             . ' - ' . telegram_escape($priceLabel) . "\n"
@@ -694,6 +732,15 @@ foreach ($urls as $url) {
             . $detail
             . telegram_escape($url)
         );
+    }
+}
+
+if ($listedUrls) {
+    try {
+        // Bing/Yandex ko turant naye products bhej do (IndexNow).
+        seo_indexnow_ping($listedUrls);
+    } catch (Throwable $indexNowError) {
+        app_log('info', 'IndexNow ping skipped', ['error' => $indexNowError->getMessage()]);
     }
 }
 

@@ -346,6 +346,54 @@ function seo_sitemap_xml(): string
     });
 }
 
+/** IndexNow key, validated. */
+function seo_indexnow_key(): string
+{
+    $key = defined('INDEXNOW_KEY') ? trim((string) INDEXNOW_KEY) : '';
+    return preg_match('/^[a-f0-9]{8,128}$/i', $key) ? $key : '';
+}
+
+/**
+ * Submit URLs to Bing/Yandex through IndexNow (instant indexing).
+ *
+ * @param list<string> $urls
+ * @return array{ok:bool,status:int,error:string,submitted:int}
+ */
+function seo_indexnow_ping(array $urls): array
+{
+    $key = seo_indexnow_key();
+    $origin = rtrim(site_url(), '/');
+    $host = (string) (parse_url($origin, PHP_URL_HOST) ?: '');
+
+    $urls = array_values(array_unique(array_filter(array_map(static function ($url): string {
+        return preg_match('#^https?://#i', (string) $url) ? (string) $url : '';
+    }, $urls))));
+    $urls = array_slice($urls, 0, 100);
+
+    if ($key === '' || $host === '' || !$urls) {
+        return ['ok' => false, 'status' => 0, 'error' => 'IndexNow key or URLs missing.', 'submitted' => 0];
+    }
+
+    $response = http_request('https://api.indexnow.org/indexnow', [
+        'method'  => 'POST',
+        'timeout' => 8,
+        'json'    => [
+            'host'        => $host,
+            'key'         => $key,
+            'keyLocation' => $origin . '/' . $key . '.txt',
+            'urlList'     => $urls,
+        ],
+    ]);
+
+    $status = (int) ($response['status'] ?? 0);
+    return [
+        'ok'        => $response['ok'] && $status >= 200 && $status < 300,
+        'status'    => $status,
+        'error'     => (string) ($response['error'] ?? ''),
+        'submitted' => count($urls),
+    ];
+}
+
 /** Google Merchant Center RSS 2.0 feed. */
 function seo_product_feed_xml(): string
 {

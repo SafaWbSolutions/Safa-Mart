@@ -22,6 +22,10 @@ return [
     // GA4 measurement id, example: G-XXXXXXXXXX
     'GOOGLE_ANALYTICS_ID' => '',
 
+    // IndexNow key (Bing/Yandex instant indexing). Key file is committed at the
+    // site root with the same value: <key>.txt
+    'INDEXNOW_KEY' => 'a3f9c2b7d4e6f8102c4b6d8e0f2a4c6e',
+
     // Ads (jab live karna ho tab bharo)
     // 'ADSENSE_CLIENT' => 'ca-pub-XXXXXXXXXXXXXXXX',
     // 'AD_SLOTS' => [

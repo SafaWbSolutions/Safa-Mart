@@ -75,7 +75,21 @@ ranking ke liye aage kya karna hai.
 
 ---
 
-## 3. Google Merchant Center (free shopping traffic)
+## 3. IndexNow — Bing/Yandex instant indexing
+
+Naya product publish hote hi bot khud Bing/Yandex ko URL bhej deta hai.
+Key file already live hai: `/a3f9c2b7d4e6f8102c4b6d8e0f2a4c6e.txt`
+
+- Manual full ping: Telegram me `/indexnow`
+- Endpoint: `https://api.indexnow.org/indexnow`
+- Key config me: `config.seo.php` → `INDEXNOW_KEY`
+
+Bing Webmaster Tools me site add karo (<https://www.bing.com/webmasters>) →
+GSC se import kar lo → sitemap submit karo.
+
+---
+
+## 4. Google Merchant Center (free shopping traffic)
 
 1. <https://merchants.google.com> par account banao.
 2. **Products → Feeds → Add feed** → **Scheduled fetch**.
@@ -87,7 +101,7 @@ ranking ke liye aage kya karna hai.
 
 ---
 
-## 4. Off-page SEO — backlinks aur brand signals
+## 5. Off-page SEO — backlinks aur brand signals
 
 Google ranking me links aur brand mentions bade factor hain. Ye kaam **regular**
 karne padenge:
@@ -141,7 +155,7 @@ Thanks!
 
 ---
 
-## 5. Content calendar (pehle 90 din)
+## 6. Content calendar (pehle 90 din)
 
 | Week | Kaam |
 |---|---|
@@ -154,7 +168,7 @@ Thanks!
 
 ---
 
-## 6. Monthly SEO checklist
+## 7. Monthly SEO checklist
 
 - [ ] Search Console → Coverage/Indexing errors check karo
 - [ ] Sitemap last crawl date aur submitted URLs dekho
@@ -167,7 +181,7 @@ Thanks!
 
 ---
 
-## 7. Kya avoid karna hai
+## 8. Kya avoid karna hai
 
 - Fake reviews ya fake `aggregateRating` (Google manual action)
 - Keyword stuffing (same keyword bar-bar)
@@ -178,7 +192,7 @@ Thanks!
 
 ---
 
-## 8. SEO files map
+## 9. SEO files map
 
 | File | Kaam |
 |---|---|

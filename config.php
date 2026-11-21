@@ -202,6 +202,7 @@ safa_define('BING_SITE_VERIFICATION', trim((string) safa_config_value('BING_SITE
 // Optional GA4 measurement id, for example G-XXXXXXXXXX.
 safa_define('GOOGLE_ANALYTICS_ID', trim((string) safa_config_value('GOOGLE_ANALYTICS_ID', '')));
 safa_define('SEO_SITEMAP_CACHE_TTL', max(300, min(86400, (int) safa_config_value('SEO_SITEMAP_CACHE_TTL', 1800))));
+safa_define('INDEXNOW_KEY', trim((string) safa_config_value('INDEXNOW_KEY', '')));
 
 
 /**
