@@ -493,7 +493,7 @@ foreach ($urls as $url) {
         if ($mrp < $price) {
             $mrp = $price;
         }
-        $metadataTitle = clean_text($metadata['title'] ?? '');
+        $metadataTitle = clean_product_title($metadata['title'] ?? '');
         if ($metadataTitle === '') {
             throw new RuntimeException('Could not find a product title.');
         }

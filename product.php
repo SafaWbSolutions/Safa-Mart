@@ -9,7 +9,7 @@ if ($product === null) {
 }
 
 $id = (int) ($product['id'] ?? 0);
-$title = clean_text($product['title'] ?? 'Product');
+$title = clean_product_title($product['title'] ?? 'Product');
 if ($title === '') {
     $title = 'Product';
 }

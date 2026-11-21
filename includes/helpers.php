@@ -155,6 +155,35 @@ function clean_text($value): string
     return trim($text);
 }
 
+/**
+ * Remove marketplace SEO noise from a product title.
+ *
+ * Example: "SAM & ROY Grey Shirt - Buy SAM & ROY Grey Shirt Online at
+ * Best Prices in India | Flipkart.com" becomes "SAM & ROY Grey Shirt".
+ */
+function clean_product_title(string $title): string
+{
+    $original = clean_text($title);
+    if ($original === '') {
+        return '';
+    }
+
+    $cleaned = preg_replace(
+        [
+            '/^(?:Amazon(?:\.in)?|Flipkart|Myntra|Ajio|Shopsy|DigiHaat)\s*[:\-–—|]\s*/iu',
+            '/\s*[-–—|]\s*Buy\b.*\bOnline\b.*$/iu',
+            '/\s+Online at Best Prices?\b.*$/iu',
+            '/\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$/iu',
+            '/^Buy\s+(?=[A-Z0-9])/u',
+        ],
+        '',
+        $original
+    );
+    $cleaned = is_string($cleaned) ? trim($cleaned, " \t\n\r\0\x0B-–—|,") : $original;
+
+    return $cleaned !== '' ? $cleaned : $original;
+}
+
 function truncate_text(string $text, int $limit): string
 {
     $text = clean_text($text);
@@ -828,7 +857,7 @@ function render_product_card(array $product): string
         return '';
     }
 
-    $title = clean_text($product['title'] ?? 'Product');
+    $title = clean_product_title($product['title'] ?? 'Product');
     if ($title === '') {
         $title = 'Product';
     }

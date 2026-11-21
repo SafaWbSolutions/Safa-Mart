@@ -56,6 +56,22 @@
         });
     }
 
+    function cleanProductTitle(value) {
+        var original = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+        if (!original) {
+            return '';
+        }
+        var cleaned = original
+            .replace(/^(?:Amazon(?:\.in)?|Flipkart|Myntra|Ajio|Shopsy|DigiHaat)\s*[:\-–—|]\s*/i, '')
+            .replace(/\s*[-–—|]\s*Buy\b.*\bOnline\b.*$/i, '')
+            .replace(/\s+Online at Best Prices?\b.*$/i, '')
+            .replace(/\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$/i, '')
+            .replace(/^Buy\s+(?=[A-Z0-9])/, '')
+            .replace(/^[\s\-–—|,]+|[\s\-–—|,]+$/g, '')
+            .trim();
+        return cleaned || original;
+    }
+
     function formatINR(value) {
         var number = Number(value);
         if (!isFinite(number) || number < 0) {
@@ -118,7 +134,7 @@
         if (id < 1) {
             return '';
         }
-        var title = String(product.title || 'Product').trim();
+        var title = cleanProductTitle(product.title) || 'Product';
         var price = Number(product.price) || 0;
         var mrp = Number(product.mrp) || 0;
         var discount = Number(product.discount_percent) || calculateDiscount(mrp, price);
@@ -158,7 +174,7 @@
             + '</a>'
             + '<div class="product-body">'
             + brandHtml
-            + '<a class="product-title" href="' + escapeHtml(productUrl) + '" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</a>'
+            + '<a class="product-title" href="' + escapeHtml(productUrl) + '">' + escapeHtml(title) + '</a>'
             + ratingHtml
             + '<div class="product-price-row"><span class="product-price">' + (price > 0 ? formatINR(price) : 'Price on request') + '</span>' + mrpHtml + '</div>'
             + '<a class="buy-button" href="' + escapeHtml(buyUrl) + '" target="_blank" rel="nofollow sponsored noopener" aria-label="Buy ' + escapeHtml(title) + ' now">'

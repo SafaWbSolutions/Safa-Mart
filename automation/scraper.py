@@ -186,6 +186,30 @@ def clean_text(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def clean_title(value: Any) -> str:
+    """Strip marketplace SEO noise such as "- Buy ... Online at Best Prices"."""
+    original = clean_text(value)
+    if not original:
+        return ""
+    cleaned = re.sub(
+        r"^(?:Amazon(?:\.in)?|Flipkart|Myntra|Ajio|Shopsy|DigiHaat)\s*[:\-–—|]\s*",
+        "",
+        original,
+        flags=re.I,
+    )
+    cleaned = re.sub(r"\s*[-–—|]\s*Buy\b.*\bOnline\b.*$", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"\s+Online at Best Prices?\b.*$", "", cleaned, flags=re.I)
+    cleaned = re.sub(
+        r"\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$",
+        "",
+        cleaned,
+        flags=re.I,
+    )
+    cleaned = re.sub(r"^Buy\s+(?=[A-Z0-9])", "", cleaned)
+    cleaned = cleaned.strip(" \t\n\r-–—|,")
+    return cleaned or original
+
+
 def truncate(value: str, limit: int) -> str:
     value = clean_text(value)
     return value if len(value) <= limit else value[: max(0, limit - 1)].rstrip() + "…"
@@ -654,6 +678,7 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
         title = clean_text(soup.title.get_text(" "))
     if not title:
         raise ScrapeError("No product title found.")
+    title = clean_title(title)
 
     description = first_meta(meta, ["og:description", "twitter:description", "description"])
     if not description and isinstance(product_ld.get("description"), str):
