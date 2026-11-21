@@ -963,7 +963,8 @@ class SupabaseClient:
         except ScrapeError as error:
             LOGGER.info("Metadata backfill skipped for %s: %s", original_url, error)
 
-    def existing_price(self, original_url: str) -> Optional[float]:        """Price already stored for this product, or None when it is new."""
+    def existing_price(self, original_url: str) -> Optional[float]:
+        """Price already stored for this product, or None when it is new."""
         if not original_url:
             return None
         if original_url in self._price_cache:
