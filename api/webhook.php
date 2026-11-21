@@ -62,6 +62,7 @@ if ($command === '/start' || $command === '/help') {
         . "Commands: /id – show this chat ID\n"
         . "/debug <link> – explain why a link fails\n"
         . "/repairlinks – fix old affiliate links and hide non-product pages\n"
+        . "/refreshmeta – refresh brand, rating and description of old products\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
     json_response(['ok' => true, 'command' => $command]);
@@ -236,6 +237,77 @@ if ($command === '/repairlinks') {
         'already'   => $already,
         'hidden'    => $hidden,
         'failed'    => $failed,
+    ]);
+}
+if ($command === '/refreshmeta') {
+    @set_time_limit(120);
+    ignore_user_abort(true);
+    telegram_send_message($chatId, '🔄 Refreshing brand, rating and details…');
+
+    $batch = 10;
+    $query = 'select=id,title,original_url&is_active=eq.true'
+        . '&order=last_checked_at.asc.nullsfirst&limit=' . $batch;
+    $result = supabase_request('GET', supabase_table() . '?' . $query, null, [
+        'service' => true,
+        'timeout' => 20,
+    ]);
+    if (!$result['ok'] || !is_array($result['data'])) {
+        telegram_send_message($chatId, '❌ Could not read products: ' . telegram_escape((string) $result['error']));
+        json_response(['ok' => true, 'command' => '/refreshmeta', 'error' => 'read failed']);
+    }
+
+    $updated = 0;
+    $failed = 0;
+    $skipped = 0;
+    $deadline = microtime(true) + 80;
+    foreach ($result['data'] as $row) {
+        if (!is_array($row) || microtime(true) >= $deadline) {
+            break;
+        }
+        $id = (int) ($row['id'] ?? 0);
+        $originalUrl = trim((string) ($row['original_url'] ?? ''));
+        if ($id < 1 || $originalUrl === '' || !is_product_page_url($originalUrl)) {
+            $skipped++;
+            continue;
+        }
+        try {
+            $meta = scrape_product_metadata($originalUrl);
+        } catch (Throwable $error) {
+            $failed++;
+            app_log('warning', 'Metadata refresh failed', [
+                'id'    => $id,
+                'error' => $error->getMessage(),
+            ]);
+            continue;
+        }
+        $patch = supabase_patch('id=eq.' . $id, [
+            'brand'           => truncate_text(clean_text((string) ($meta['brand'] ?? '')), 120),
+            'rating'          => (float) ($meta['rating'] ?? 0),
+            'rating_count'    => (int) ($meta['rating_count'] ?? 0),
+            'description'     => truncate_text((string) ($meta['description'] ?? ''), 1800),
+            'last_checked_at' => gmdate('c'),
+        ]);
+        if ($patch['ok']) {
+            $updated++;
+        } else {
+            $failed++;
+        }
+    }
+
+    $summary = '✅ <b>Details refresh finished</b>' . "\n"
+        . '• Updated: ' . $updated . "\n"
+        . '• Failed: ' . $failed . "\n"
+        . '• Skipped: ' . $skipped;
+    if ($updated >= $batch || microtime(true) >= $deadline) {
+        $summary .= "\n🔁 Run /refreshmeta again for the rest.";
+    }
+    telegram_send_message($chatId, $summary);
+    json_response([
+        'ok'      => true,
+        'command' => '/refreshmeta',
+        'updated' => $updated,
+        'failed'  => $failed,
+        'skipped' => $skipped,
     ]);
 }
 if ($command === '/id') {

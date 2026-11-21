@@ -828,6 +828,11 @@ function scrape_product_metadata(string $url): array
             $brand = $brandData['name'];
         }
     }
+    $brand = clean_text($brand);
+    // Shopsy/Flipkart JSON-LD often reports the marketplace itself as the brand.
+    if ($brand !== '' && strcasecmp($brand, detect_platform($response['effective_url'] ?? $url)) === 0) {
+        $brand = '';
+    }
 
     $categoryHint = meta_first($meta, ['product:category', 'article:section', 'category']);
     if ($categoryHint === '' && !empty($jsonProduct['category']) && is_string($jsonProduct['category'])) {
