@@ -146,8 +146,8 @@ safa_define('PLATFORM_FILTERS', ['Flipkart', 'Myntra', 'Amazon']);
  * subdomain; an entry without a dot is treated as a host substring so a single
  * value such as "hamaramall" covers hamaramall.in / .com / .shop alike.
  */
-safa_define('BLOCKED_PLATFORMS', ['Ajio', 'Hamara Mall', 'HamaraMall']);
-safa_define('BLOCKED_DOMAINS', ['ajio.com', 'ajjio.in', 'hamaramall']);
+safa_define('BLOCKED_PLATFORMS', ['Hamara Mall', 'HamaraMall']);
+safa_define('BLOCKED_DOMAINS', ['hamaramall']);
 
 safa_define('HTTP_TIMEOUT', max(5, min(30, (int) safa_config_value('HTTP_TIMEOUT', 15))));
 safa_define('USER_AGENT', trim((string) safa_config_value(

@@ -97,8 +97,8 @@ DEFAULT_EARNKARO_API_URL = "https://ekaro-api.affiliaters.in/api/converter/publi
 # Stores that must never be listed or shown. Domain entries match the host and
 # its subdomains; entries without a dot match the host as a substring so
 # "hamaramall" covers hamaramall.in / .com / .shop.
-BLOCKED_PLATFORMS = {"Ajio", "Hamara Mall", "HamaraMall"}
-BLOCKED_DOMAINS = ("ajio.com", "ajjio.in", "hamaramall")
+BLOCKED_PLATFORMS = {"Hamara Mall", "HamaraMall"}
+BLOCKED_DOMAINS = ("hamaramall",)
 
 TRACKING_KEYS = re.compile(
     r"^(utm_.*|gclid|fbclid|msclkid|yclid|igshid|si|ref|ref_|affid|affExtParam\d+|"
