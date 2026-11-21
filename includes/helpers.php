@@ -429,6 +429,12 @@ function is_blocked_product(array $product): bool
             return true;
         }
     }
+    // Hide brand/category/campaign pages that were saved as if they were a
+    // single product (e.g. a Myntra brand page with the Myntra logo image).
+    $originalUrl = trim((string) ($product['original_url'] ?? ''));
+    if ($originalUrl !== '' && !is_product_page_url($originalUrl)) {
+        return true;
+    }
     return false;
 }
 
