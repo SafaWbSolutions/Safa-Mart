@@ -1,0 +1,6 @@
+# Safa Mart — Authorized Digital Sellers (ads.txt)
+#
+# After AdSense (or any ad network) approves this site, uncomment the line
+# below and replace the publisher id with your own. One line per seller.
+#
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0

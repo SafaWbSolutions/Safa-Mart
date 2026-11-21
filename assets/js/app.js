@@ -649,6 +649,41 @@
         });
     });
 
+    /* ---------- Horizontal offer rails ---------- */
+    $all('[data-rail]').forEach(function (rail) {
+        var shell = rail.parentElement;
+        var prev = shell ? shell.querySelector('[data-rail-prev]') : null;
+        var next = shell ? shell.querySelector('[data-rail-next]') : null;
+        if (!prev && !next) {
+            return;
+        }
+        var step = function () {
+            return Math.max(240, Math.round(rail.clientWidth * 0.8));
+        };
+        var sync = function () {
+            var edge = rail.scrollWidth - rail.clientWidth - 2;
+            if (prev) {
+                prev.disabled = rail.scrollLeft <= 2;
+            }
+            if (next) {
+                next.disabled = rail.scrollLeft >= edge;
+            }
+        };
+        if (prev) {
+            prev.addEventListener('click', function () {
+                rail.scrollBy({ left: -step(), behavior: 'smooth' });
+            });
+        }
+        if (next) {
+            next.addEventListener('click', function () {
+                rail.scrollBy({ left: step(), behavior: 'smooth' });
+            });
+        }
+        rail.addEventListener('scroll', sync, { passive: true });
+        window.addEventListener('resize', sync);
+        sync();
+    });
+
     /* ---------- Small UX niceties ---------- */
     if (header) {
         var onScroll = function () {

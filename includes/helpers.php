@@ -91,15 +91,31 @@ function security_headers(): void
         }
     }
 
+    $adsScript = '';
+    $adsFrame = '';
+    $adsConnect = '';
+    if (defined('ADSENSE_CLIENT') && trim((string) ADSENSE_CLIENT) !== '') {
+        $googleScripts = ' https://pagead2.googlesyndication.com https://*.googlesyndication.com'
+            . ' https://adservice.google.com https://www.googletagservices.com'
+            . ' https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google';
+        $adsScript = $googleScripts;
+        $adsFrame = " frame-src 'self' https://googleads.g.doubleclick.net"
+            . ' https://tpc.googlesyndication.com https://www.google.com https://*.googlesyndication.com;';
+        $adsConnect = ' https://pagead2.googlesyndication.com https://*.googlesyndication.com'
+            . ' https://googleads.g.doubleclick.net https://adservice.google.com'
+            . ' https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google';
+    }
+
     $csp = "default-src 'self'; "
         . "base-uri 'self'; "
         . "frame-ancestors 'none'; "
         . "form-action 'self'; "
-        . "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
+        . "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com" . $adsScript . '; '
         . "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
         . "img-src 'self' data: https:; "
         . "font-src 'self' data:; "
-        . "connect-src 'self'" . $supabaseOrigin . " https://*.supabase.co; "
+        . "connect-src 'self'" . $supabaseOrigin . " https://*.supabase.co" . $adsConnect . '; '
+        . $adsFrame
         . "object-src 'none'; "
         . "upgrade-insecure-requests";
     header('Content-Security-Policy: ' . $csp);
@@ -963,6 +979,10 @@ function render_product_card(array $product): string
     $discountHtml = $discount > 0
         ? '<span class="discount-pill">' . $discount . '% OFF</span>'
         : '';
+    $featuredBadge = truncate_text(clean_text((string) ($product['_featured_badge'] ?? '')), 24);
+    $featuredHtml = $featuredBadge !== ''
+        ? '<span class="card-featured">⭐ ' . e($featuredBadge) . '</span>'
+        : '';
     $mrpHtml = ($mrp > $price && $price > 0)
         ? '<span class="price-mrp">' . e(inr($mrp)) . '</span>'
         : '';
@@ -972,6 +992,7 @@ function render_product_card(array $product): string
         . '<a class="product-media" href="' . e($productUrl) . '" aria-label="' . e($title) . '">'
         . $media
         . $discountHtml
+        . $featuredHtml
         . '<span class="platform-badge platform-' . e($platformClass) . '">' . e($platform) . '</span>'
         . '</a>'
         . '<div class="product-body">'
@@ -985,6 +1006,148 @@ function render_product_card(array $product): string
         . '</a>'
         . '</div>'
         . '</article>';
+}
+
+/**
+ * Wide spotlight card used when only a few products are highlighted. This is
+ * the "brand deal" layout: large image, badge, discount and a clear CTA.
+ */
+function render_spotlight_hero_card(array $product): string
+{
+    $id = (int) ($product['id'] ?? 0);
+    if ($id < 1) {
+        return '';
+    }
+
+    $title = clean_product_title($product['title'] ?? 'Product');
+    if ($title === '') {
+        $title = 'Product';
+    }
+    $slug = (string) ($product['slug'] ?? '');
+    $price = (float) ($product['price'] ?? 0);
+    $mrp = (float) ($product['mrp'] ?? 0);
+    $discount = (int) ($product['discount_percent'] ?? 0);
+    if ($discount <= 0) {
+        $discount = calculate_discount($mrp, $price);
+    }
+    $saving = max(0, (float) round($mrp - $price));
+    $platform = clean_text($product['source_platform'] ?? 'Store');
+    if ($platform === '' || $platform === 'Other') {
+        $platform = 'Store';
+    }
+    $brand = clean_text((string) ($product['brand'] ?? ''));
+    $image = (string) ($product['thumbnail_url'] ?? '');
+    if (!preg_match('#^https?://#i', $image)) {
+        $image = '';
+    }
+    $badge = truncate_text(clean_text((string) ($product['_featured_badge'] ?? '')), 24);
+    if ($badge === '') {
+        $badge = 'Featured deal';
+    }
+    $productUrl = site_url('product.php?slug=' . rawurlencode($slug));
+
+    $media = $image !== ''
+        ? '<img src="' . e($image) . '" alt="' . e($title) . '" loading="lazy" decoding="async" class="js-product-img">'
+        : '<span class="offer-placeholder" aria-hidden="true">🛍️</span>';
+
+    $meta = $brand !== '' ? $brand . ' · ' . $platform : $platform;
+
+    return '<a class="spotlight-card" href="' . e($productUrl) . '" aria-label="' . e($title) . '">'
+        . '<span class="spotlight-media">' . $media
+        . ($discount > 0 ? '<span class="spotlight-off">' . $discount . '% OFF</span>' : '')
+        . '</span>'
+        . '<span class="spotlight-body">'
+        . '<span class="spotlight-badge">⭐ ' . e($badge) . '</span>'
+        . '<span class="spotlight-brand">' . e($meta) . '</span>'
+        . '<span class="spotlight-title">' . e($title) . '</span>'
+        . '<span class="spotlight-price">' . ($price > 0 ? e(inr($price)) : 'Check price')
+        . ($mrp > $price && $price > 0 ? '<s>' . e(inr($mrp)) . '</s>' : '')
+        . ($discount > 0 ? '<em>' . $discount . '% off</em>' : '')
+        . '</span>'
+        . ($saving > 0 ? '<span class="spotlight-save">You save ' . e(inr($saving)) . ' — same price as ' . e($platform) . '</span>' : '')
+        . '<span class="spotlight-cta">View deal'
+        . '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>'
+        . '</span>'
+        . '</span>'
+        . ($discount > 0
+            ? '<span class="spotlight-side" aria-hidden="true">'
+                . '<span class="spotlight-side-off">' . $discount . '%</span>'
+                . '<span class="spotlight-side-label">OFF</span>'
+                . '<span class="spotlight-side-note">Limited-time pick</span>'
+                . '</span>'
+            : '')
+        . '</a>';
+}
+
+/**
+ * Compact card used by the home page offer rails (Flipkart-style strip).
+ */
+function render_offer_rail_card(array $product, int $rank = 0): string
+{
+    $id = (int) ($product['id'] ?? 0);
+    if ($id < 1) {
+        return '';
+    }
+
+    $title = clean_product_title($product['title'] ?? 'Product');
+    if ($title === '') {
+        $title = 'Product';
+    }
+    $slug = (string) ($product['slug'] ?? '');
+    $price = (float) ($product['price'] ?? 0);
+    $mrp = (float) ($product['mrp'] ?? 0);
+    $discount = (int) ($product['discount_percent'] ?? 0);
+    if ($discount <= 0) {
+        $discount = calculate_discount($mrp, $price);
+    }
+    $platform = clean_text($product['source_platform'] ?? 'Store');
+    if ($platform === '' || $platform === 'Other') {
+        $platform = 'Store';
+    }
+    $brand = clean_text((string) ($product['brand'] ?? ''));
+    $image = (string) ($product['thumbnail_url'] ?? '');
+    if (!preg_match('#^https?://#i', $image)) {
+        $image = '';
+    }
+    $saving = max(0, (float) round($mrp - $price));
+    $productUrl = site_url('product.php?slug=' . rawurlencode($slug));
+
+    $badge = truncate_text(clean_text((string) ($product['_featured_badge'] ?? '')), 24);
+    $badgeHtml = $badge !== ''
+        ? '<span class="offer-badge">⭐ ' . e($badge) . '</span>'
+        : '';
+    $rankHtml = $rank > 0
+        ? '<span class="offer-rank" aria-label="Rank ' . $rank . '">#' . $rank . '</span>'
+        : '';
+
+    $media = $image !== ''
+        ? '<img src="' . e($image) . '" alt="' . e($title) . '" loading="lazy" decoding="async" class="js-product-img">'
+        : '<span class="offer-placeholder" aria-hidden="true">🛍️</span>';
+
+    $offHtml = $discount > 0
+        ? '<span class="offer-off">' . $discount . '% OFF</span>'
+        : '';
+    $saveHtml = $saving > 0
+        ? '<span class="offer-save">Save ' . e(inr($saving)) . '</span>'
+        : '';
+    $mrpHtml = ($mrp > $price && $price > 0)
+        ? '<s>' . e(inr($mrp)) . '</s>'
+        : '';
+
+    return '<a class="offer-card" href="' . e($productUrl) . '" aria-label="' . e($title) . '">'
+        . '<span class="offer-media">'
+        . $media
+        . $rankHtml
+        . $offHtml
+        . $badgeHtml
+        . '</span>'
+        . '<span class="offer-body">'
+        . ($brand !== '' ? '<span class="offer-brand">' . e($brand) . '</span>' : '<span class="offer-brand">' . e($platform) . '</span>')
+        . '<span class="offer-title">' . e($title) . '</span>'
+        . '<span class="offer-price">' . ($price > 0 ? e(inr($price)) : 'Check price') . $mrpHtml . '</span>'
+        . $saveHtml
+        . '</span>'
+        . '</a>';
 }
 
 function human_date(?string $date): string

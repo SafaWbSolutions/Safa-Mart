@@ -53,6 +53,20 @@ $hasFilters = $searchQuery !== '' || $category !== '' || $platform !== ''
     || $minDiscount > 0 || $brand !== '' || $minRating > 0;
 $configMissing = missing_config(['SUPABASE_URL', 'SUPABASE_ANON_KEY']);
 
+// Home page rails: curated spotlight + biggest-discount strip.
+$spotlightProducts = $hasFilters ? [] : fetch_spotlight_products(8);
+$bestOfferProducts = $hasFilters ? [] : fetch_best_offer_products(12, BEST_OFFER_MIN_DISCOUNT);
+$products = attach_featured_badges($products);
+
+$railMaxDiscount = 0;
+foreach ($bestOfferProducts as $railProduct) {
+    $railMaxDiscount = max($railMaxDiscount, (int) ($railProduct['discount_percent'] ?? 0));
+}
+
+// One or two highlights look best as a wide spotlight card; a larger set
+// becomes the horizontal rail.
+$useSpotlightHero = count($spotlightProducts) <= 2;
+
 $buildUrl = static function (array $changes) use (
     $searchQuery,
     $category,
@@ -140,6 +154,7 @@ if (SUPABASE_URL !== '') {
         };
     </script>
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
     <script>
         window.SAFA_CONFIG = <?= json_encode([
             'supabaseUrl' => SUPABASE_URL,
@@ -230,6 +245,8 @@ if (SUPABASE_URL !== '') {
                href="<?= e($buildUrl(['category' => $cat])) ?>" data-category="<?= e($cat) ?>"><?= e($cat) ?></a>
         <?php endforeach; ?>
     </nav>
+
+    <?= ad_slot('home-top') ?>
 
     <?php
     $activeFilterCount = 0;
@@ -362,6 +379,77 @@ if (SUPABASE_URL !== '') {
         </section>
     <?php endif; ?>
 
+    <?php if ($spotlightProducts): ?>
+        <section class="deal-rail-section rail-spotlight <?= $useSpotlightHero ? 'spotlight-hero-section' : '' ?>" aria-labelledby="spotlightHeading">
+            <div class="rail-head">
+                <div class="rail-head-text">
+                    <h2 id="spotlightHeading"><span aria-hidden="true">⭐</span> Spotlight deals</h2>
+                    <p>Hand-picked by our team — live for a limited time</p>
+                </div>
+                <a class="rail-link" href="<?= e(site_url('index.php')) ?>">
+                    All deals
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </a>
+            </div>
+            <?php if ($useSpotlightHero): ?>
+                <div class="spotlight-hero-grid spotlight-count-<?= count($spotlightProducts) ?>">
+                    <?php foreach ($spotlightProducts as $railProduct): ?>
+                        <?= render_spotlight_hero_card($railProduct) ?>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="rail-shell">
+                    <button type="button" class="rail-arrow rail-prev" data-rail-prev aria-label="Scroll spotlight deals left">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <div class="deal-rail" data-rail>
+                        <?php foreach ($spotlightProducts as $railProduct): ?>
+                            <?= render_offer_rail_card($railProduct) ?>
+                        <?php endforeach; ?>
+                    </div>
+                    <button type="button" class="rail-arrow rail-next" data-rail-next aria-label="Scroll spotlight deals right">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                    </button>
+                </div>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($bestOfferProducts): ?>
+        <section class="deal-rail-section rail-best" aria-labelledby="bestOfferHeading">
+            <div class="rail-head">
+                <div class="rail-head-text">
+                    <h2 id="bestOfferHeading"><span aria-hidden="true">🔥</span> Best offers right now</h2>
+                    <p>Fresh discounts across every store</p>
+                </div>
+                <div class="rail-head-actions">
+                    <?php if ($railMaxDiscount > 0): ?>
+                        <span class="rail-chip">Up to <?= $railMaxDiscount ?>% off</span>
+                    <?php endif; ?>
+                    <a class="rail-link" href="<?= e(site_url('index.php?sort=discount_desc')) ?>">
+                        View all
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="rail-shell">
+                <button type="button" class="rail-arrow rail-prev" data-rail-prev aria-label="Scroll best offers left">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div class="deal-rail" data-rail>
+                    <?php foreach ($bestOfferProducts as $index => $railProduct): ?>
+                        <?= render_offer_rail_card($railProduct, $index + 1) ?>
+                    <?php endforeach; ?>
+                </div>
+                <button type="button" class="rail-arrow rail-next" data-rail-next aria-label="Scroll best offers right">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+            </div>
+        </section>
+    <?php endif; ?>
+
+    <?= ad_slot('home-mid') ?>
+
     <section class="products-section" aria-labelledby="dealsHeading">
         <div class="section-heading">
             <div>
@@ -419,6 +507,7 @@ if (SUPABASE_URL !== '') {
             </button>
         </div>
         <div id="infiniteSentinel" class="infinite-sentinel" aria-hidden="true"></div>
+        <?= ad_slot('home-bottom') ?>
     </section>
 </main>
 

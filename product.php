@@ -25,6 +25,11 @@ if ($platform === '' || $platform === 'Other') {
 }
 $category = clean_text($product['category'] ?? 'Other');
 $brand = clean_text((string) ($product['brand'] ?? ''));
+$featuredBadge = '';
+$featuredBadges = featured_badges();
+if ($featuredBadges) {
+    $featuredBadge = truncate_text(clean_text((string) ($featuredBadges[strtolower($slug)] ?? '')), 24);
+}
 $rating = (float) ($product['rating'] ?? 0);
 $ratingCount = (int) ($product['rating_count'] ?? 0);
 $description = clean_text($product['description'] ?? '');
@@ -288,6 +293,7 @@ $breadcrumbSchema = [
         };
     </script>
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset_url('assets/css/home-v2.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/product-v2.css')) ?>">
     <script>
         window.SAFA_CONFIG = <?= json_encode([
@@ -316,7 +322,7 @@ $breadcrumbSchema = [
     </div>
 </div>
 
-<header class="site-header product-header">
+<header class="site-header product-header" id="siteHeader">
     <div class="site-container header-main">
         <a class="back-link" href="<?= e(site_url('index.php')) ?>" aria-label="Back to all deals">
             <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
@@ -330,6 +336,25 @@ $breadcrumbSchema = [
             </span>
             <span class="brand-text">Safa<span>Mart</span></span>
         </a>
+
+        <form class="search-form" id="searchForm" action="<?= e(site_url('index.php')) ?>" method="get" role="search">
+            <svg class="search-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>
+            </svg>
+            <input
+                type="search"
+                id="searchInput"
+                name="q"
+                value=""
+                placeholder="Search sarees, earbuds, shoes…"
+                autocomplete="off"
+                enterkeyhint="search"
+                aria-label="Search products"
+                maxlength="60"
+            >
+            <button type="submit" class="search-submit">Search</button>
+        </form>
+
         <button type="button" class="header-share" data-share-button aria-label="Share this product">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/>
@@ -337,6 +362,21 @@ $breadcrumbSchema = [
             </svg>
             <span>Share</span>
         </button>
+    </div>
+
+    <div class="site-container platform-strip" aria-label="Browse deals by store">
+        <a class="platform-pill" href="<?= e(site_url('index.php')) ?>">
+            <span class="platform-dot platform-dot-all"></span> All deals
+        </a>
+        <?php foreach (PLATFORM_FILTERS as $store): ?>
+            <a class="platform-pill" href="<?= e(site_url('index.php?platform=' . rawurlencode($store))) ?>">
+                <span class="platform-dot platform-dot-<?= e(strtolower($store)) ?>"></span> <?= e($store) ?>
+            </a>
+        <?php endforeach; ?>
+        <a class="platform-pill platform-pill-more" href="<?= e(site_url('index.php')) ?>">
+            More deals
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
     </div>
 </header>
 
@@ -348,6 +388,8 @@ $breadcrumbSchema = [
         <span aria-hidden="true">/</span>
         <span aria-current="page"><?= e(truncate_text($title, 46)) ?></span>
     </nav>
+
+    <?= ad_slot('product-top') ?>
 
     <div class="product-detail-grid">
         <section class="product-gallery" data-gallery aria-label="Product images">
@@ -405,6 +447,9 @@ $breadcrumbSchema = [
                 <span class="category-tag"><?= e($category !== '' ? $category : 'Deal') ?></span>
                 <?php if ($brand !== ''): ?>
                     <span class="brand-tag"><?= e($brand) ?></span>
+                <?php endif; ?>
+                <?php if ($featuredBadge !== ''): ?>
+                    <span class="brand-tag featured-tag">⭐ <?= e($featuredBadge) ?></span>
                 <?php endif; ?>
             </div>
 
@@ -614,6 +659,7 @@ $breadcrumbSchema = [
             </div>
         </section>
     <?php endif; ?>
+    <?= ad_slot('product-bottom') ?>
 </main>
 
 <div class="mobile-buybar">

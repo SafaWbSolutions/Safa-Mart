@@ -142,6 +142,30 @@ safa_define('HIDE_UNAFFILIATED_PRODUCTS', safa_bool(safa_config_value('HIDE_UNAF
 safa_define('PRODUCT_CATEGORIES', ['Fashion', 'Electronics', 'Home & Kitchen', 'Beauty', 'Footwear', 'Accessories']);
 safa_define('PLATFORM_FILTERS', ['Flipkart', 'Myntra', 'Amazon', 'Ajio', 'Shopsy', 'DigiHaat']);
 
+// ---------------------------------------------------------------------------
+// Home page rails and highlights
+// ---------------------------------------------------------------------------
+// Spotlight cards are controlled from Telegram: /highlight <slug> <days> <badge>.
+// Entries live in uploads/featured.json and expire automatically.
+safa_define('FEATURED_MAX_ITEMS', max(1, min(24, (int) safa_config_value('FEATURED_MAX_ITEMS', 12))));
+safa_define('BEST_OFFER_MIN_DISCOUNT', max(0, min(95, (int) safa_config_value('BEST_OFFER_MIN_DISCOUNT', 40))));
+
+// ---------------------------------------------------------------------------
+// Ads
+// ---------------------------------------------------------------------------
+// Keep ADS_ENABLED true and fill AD_SLOTS only when ads should go live.
+// Empty slots render nothing for visitors. Add ?ads=preview to any URL to see
+// the reserved space. AdSense publisher id goes in config.local.php.
+safa_define('ADS_ENABLED', safa_bool(safa_config_value('ADS_ENABLED', true)));
+safa_define('ADSENSE_CLIENT', trim((string) safa_config_value('ADSENSE_CLIENT', '')));
+safa_define('AD_SLOTS', safa_config_value('AD_SLOTS', [
+    'home-top'       => ['html' => ''],
+    'home-mid'       => ['html' => ''],
+    'home-bottom'    => ['html' => ''],
+    'product-top'    => ['html' => ''],
+    'product-bottom' => ['html' => ''],
+]));
+
 /**
  * Stores that are permanently rejected: the Telegram bot never processes them
  * and the storefront never displays them. Domain entries match the host and any
@@ -187,3 +211,5 @@ require_once __DIR__ . '/includes/http.php';
 require_once __DIR__ . '/includes/metadata.php';
 require_once __DIR__ . '/includes/images.php';
 require_once __DIR__ . '/includes/supabase.php';
+require_once __DIR__ . '/includes/featured.php';
+require_once __DIR__ . '/includes/ads.php';

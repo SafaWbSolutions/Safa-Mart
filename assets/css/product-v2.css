@@ -10,7 +10,35 @@
 .product-top-strip .top-strip-highlight { font-weight: 800; color: #fff; }
 .product-top-strip .top-strip-sep { color: rgba(255, 255, 255, .45); }
 
+/* ----- Header: keep search + store navigation on product pages ----- */
+.product-header .header-main {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 14px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+.product-header .brand-compact { justify-self: start; }
+.product-header .back-link { flex-shrink: 0; }
+.product-header .search-form { height: 42px; }
+.product-header .search-submit { height: 32px; padding: 0 15px; }
+.product-page .platform-strip {
+    padding-top: 0;
+    padding-bottom: 9px;
+}
+.platform-pill-more {
+    border-style: dashed;
+    border-color: #f4c6d5;
+    color: var(--brand-dark);
+}
+.platform-dot-ajio { background: #98a2b3; }
+.platform-dot-shopsy { background: #ff7a1a; }
+.platform-dot-digihaat { background: #6d28d9; }
+
 .product-page .product-h1 { font-size: 31px; letter-spacing: -.035em; margin-bottom: 12px; }
+
+@media (min-width: 721px) {
+    .product-page .product-gallery { top: 120px; }
+}
 .product-page .product-info { min-width: 0; }
 
 .rating-stars {
@@ -522,6 +550,19 @@
 }
 
 @media (max-width: 720px) {
+    .product-header .header-main {
+        grid-template-columns: auto 1fr auto;
+        gap: 8px;
+        padding-top: 9px;
+        padding-bottom: 9px;
+    }
+    .product-header .back-link { grid-column: 1; grid-row: 1; padding: 0 4px; }
+    .product-header .back-link span { display: none; }
+    .product-header .brand-compact { grid-column: 2; grid-row: 1; justify-self: center; }
+    .product-header .header-share { grid-column: 3; grid-row: 1; padding: 0 10px; }
+    .product-header .header-share span { display: none; }
+    .product-header .search-form { grid-column: 1 / -1; grid-row: 2; height: 40px; }
+    .product-page .platform-strip { padding-bottom: 8px; }
     .product-page .product-h1 { font-size: 21px; }
     .product-top-strip .top-strip-inner { min-height: 30px; font-size: 9.5px; gap: 6px; }
     .price-hero { padding: 14px 15px; border-radius: 14px; }

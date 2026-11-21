@@ -63,6 +63,9 @@ if ($command === '/start' || $command === '/help') {
         . "/debug <link> – explain why a link fails\n"
         . "/repairlinks – fix old affiliate links and hide non-product pages\n"
         . "/refreshmeta – refresh brand, rating and description of old products\n"
+        . "/highlight &lt;slug|id&gt; [days] [badge] – spotlight a product on the home page\n"
+        . "/unhighlight &lt;slug|id&gt; – remove a spotlight\n"
+        . "/highlights – list current spotlights\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
     json_response(['ok' => true, 'command' => $command]);
@@ -325,6 +328,96 @@ if ($command === '/refreshmeta') {
         'hidden'  => $hidden,
         'failed'  => $failed,
     ]);
+}
+if ($command === '/highlight') {
+    $args = array_values(array_filter(array_slice($parts, 1), static function ($part): bool {
+        return $part !== '';
+    }));
+    if (!$args) {
+        telegram_send_message(
+            $chatId,
+            "Usage: <code>/highlight &lt;slug or id&gt; [days] [badge]</code>\n"
+            . "Example: <code>/highlight my-brand-kurta-12ab34cd 10 Brand Deal</code>\n"
+            . 'Days default 7, badge default "Featured deal".'
+        );
+        json_response(['ok' => true, 'command' => '/highlight']);
+    }
+
+    $target = (string) $args[0];
+    if (preg_match('/[?&]slug=([^&\s]+)/', $target, $slugMatch)) {
+        $target = rawurldecode($slugMatch[1]);
+    }
+
+    $days = 7;
+    $badgeParts = [];
+    foreach (array_slice($args, 1) as $index => $arg) {
+        if ($index === 0 && preg_match('/^\d{1,3}$/', $arg)) {
+            $days = max(1, min(365, (int) $arg));
+            continue;
+        }
+        $badgeParts[] = $arg;
+    }
+    $badge = trim(implode(' ', $badgeParts));
+
+    $product = ctype_digit($target) ? find_product_by_id((int) $target) : find_product_by_slug($target);
+    if ($product === null) {
+        telegram_send_message($chatId, '❌ Product not found: <code>' . telegram_escape($target) . '</code>');
+        json_response(['ok' => true, 'command' => '/highlight', 'error' => 'not found']);
+    }
+
+    $slug = (string) ($product['slug'] ?? '');
+    $saved = featured_add($slug, (int) ($product['id'] ?? 0), $days, $badge);
+    if (!$saved['ok']) {
+        telegram_send_message($chatId, '❌ ' . telegram_escape((string) ($saved['error'] ?? 'Could not save highlight.')));
+        json_response(['ok' => true, 'command' => '/highlight', 'error' => 'save failed']);
+    }
+
+    $entry = $saved['entry'];
+    telegram_send_message(
+        $chatId,
+        "⭐ <b>Highlighted</b>\n"
+        . '• ' . telegram_escape(clean_product_title((string) ($product['title'] ?? $slug))) . "\n"
+        . '• Badge: ' . telegram_escape((string) $entry['badge']) . "\n"
+        . '• Live ' . telegram_escape(featured_until_label((string) $entry['until'])) . "\n"
+        . '• Link: ' . telegram_escape(site_url('product.php?slug=' . rawurlencode($slug)))
+    );
+    json_response(['ok' => true, 'command' => '/highlight', 'slug' => $slug]);
+}
+if ($command === '/unhighlight') {
+    $target = trim((string) preg_replace('~^/unhighlight(@\S+)?\s*~i', '', $text));
+    if ($target === '') {
+        telegram_send_message($chatId, 'Usage: <code>/unhighlight &lt;slug or id&gt;</code>');
+        json_response(['ok' => true, 'command' => '/unhighlight']);
+    }
+
+    $removed = featured_remove($target);
+    telegram_send_message(
+        $chatId,
+        $removed['ok']
+            ? '✅ Highlight removed for <code>' . telegram_escape($target) . '</code>.'
+            : '❌ ' . telegram_escape((string) ($removed['error'] ?? 'Could not remove highlight.'))
+    );
+    json_response(['ok' => true, 'command' => '/unhighlight']);
+}
+if ($command === '/highlights') {
+    $items = featured_items();
+    if (!$items) {
+        telegram_send_message($chatId, 'No highlighted products right now. Use /highlight to add one.');
+        json_response(['ok' => true, 'command' => '/highlights']);
+    }
+
+    $lines = ['⭐ <b>Highlighted products</b> (' . count($items) . ')'];
+    foreach (array_slice($items, 0, 12) as $item) {
+        $lines[] = '• <code>' . telegram_escape($item['slug']) . '</code>'
+            . ($item['badge'] !== '' ? ' · ' . telegram_escape($item['badge']) : '')
+            . ' · ' . telegram_escape(featured_until_label($item['until']));
+    }
+    if (count($items) > 12) {
+        $lines[] = '…and ' . (count($items) - 12) . ' more.';
+    }
+    $lines[] = 'Remove: /unhighlight &lt;slug&gt;';
+    telegram_send_message($chatId, implode("\n", $lines));
+    json_response(['ok' => true, 'command' => '/highlights']);
 }
 if ($command === '/id') {
     $userId = (string) ($message['from']['id'] ?? 'unknown');
