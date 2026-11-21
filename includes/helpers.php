@@ -513,6 +513,38 @@ function canonicalize_product_url(string $url): string
     return $result;
 }
 
+/**
+ * True only for a single product page, not a brand/category/campaign listing.
+ *
+ * Stores whose URL shape is unknown are allowed through so new EarnKaro
+ * partners keep working; the known marketplaces get a strict check.
+ */
+function is_product_page_url(string $url): bool
+{
+    $platform = detect_platform($url);
+    $path = strtolower((string) parse_url($url, PHP_URL_PATH));
+    if ($path === '' || $path === '/') {
+        return false;
+    }
+
+    switch ($platform) {
+        case 'Myntra':
+            // .../product-slug/40504218/buy
+            return (bool) preg_match('~/\d{6,}/buy(?:/|$)~', $path);
+        case 'Flipkart':
+            // .../product-slug/p/itm1234abcd
+            return (bool) preg_match('~/p/itm[a-z0-9]+~', $path);
+        case 'Ajio':
+            return (bool) preg_match('~/p/\d{5,}~', $path);
+        case 'Amazon':
+            return (bool) preg_match('~/(?:dp|gp/product)/[a-z0-9]{10}~', $path);
+        default:
+            // Unknown stores keep working; strict checks only where the URL
+            // shape is well known.
+            return true;
+    }
+}
+
 function infer_category(string $text, string $hint = ''): string
 {
     $hint = strtolower(trim($hint));

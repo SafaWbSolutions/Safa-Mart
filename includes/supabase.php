@@ -127,6 +127,13 @@ function supabase_table(): string
     }
     return $table;
 }
+
+/**
+ * Fetch rows from a table.
+ *
+ * @return list<array<string,mixed>>
+ */
+function supabase_select(string $table, string $query = '', bool $service = false): array
 {
     if (!preg_match('/^[a-z][a-z0-9_]*$/', $table)) {
         return [];

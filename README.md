@@ -178,11 +178,14 @@ curl "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
 - Verifies `X-Telegram-Bot-Api-Secret-Token` with `hash_equals`.
 - Optional chat allowlist plus per-chat rate limiting.
 - Extracts up to two URLs from a message caption/text.
+- Rejects brand/category/campaign pages and accepts only single product pages for Myntra, Flipkart, Ajio and Amazon.
 - Converts supported stores (Flipkart, Myntra, Amazon, etc.) through EarnKaro using `Authorization: Bearer <EARNKARO_TOKEN>`.
-- Scrapes `og:title`, `og:image`, OpenGraph price and JSON-LD `Product`/`Offer`.
+- Scrapes `og:title`, `og:image`, OpenGraph price and JSON-LD `Product`/`Offer`, and rejects logos, sprites, placeholders and tiny 200x200 share images.
 - Downloads up to three images, resizes them, converts to WebP with GD, and stores them under `uploads/products/YYYY/MM/`.
 - Upserts to Supabase on `original_url` with `Prefer: resolution=merge-duplicates`.
 - Replies with the public product page link.
+- `/debug <link>` shows resolution, platform and the EarnKaro conversion result.
+- `/repairlinks` re-converts old products in small batches and hides rows whose source is not a single product page.
 
 Telegram retries the same update if it does not receive HTTP 200. The webhook deduplicates update IDs and upserts are idempotent.
 

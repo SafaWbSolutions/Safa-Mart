@@ -61,6 +61,7 @@ if ($command === '/start' || $command === '/help') {
         . "Supported: Flipkart, Myntra, Amazon and more.\n"
         . "Commands: /id – show this chat ID\n"
         . "/debug <link> – explain why a link fails\n"
+        . "/repairlinks – fix old affiliate links and hide non-product pages\n"
         . "Store: " . telegram_escape(site_url('index.php'));
     telegram_send_message($chatId, $welcome);
     json_response(['ok' => true, 'command' => $command]);
@@ -99,6 +100,7 @@ if ($command === '/debug') {
     $lines[] = '• Resolved: ' . telegram_escape($resolved);
     $debugPlatform = detect_platform($resolved);
     $lines[] = '• Platform: ' . telegram_escape($debugPlatform);
+    $lines[] = '• Single product page: ' . (is_product_page_url($resolved) ? 'yes' : 'no (listing/campaign link)');
 
     if (!in_array($debugPlatform, EARNKARO_PLATFORMS, true)) {
         $lines[] = '• EarnKaro: this store is not in the supported list';
@@ -113,6 +115,112 @@ if ($command === '/debug') {
 
     telegram_send_message($chatId, implode("\n", $lines));
     json_response(['ok' => true, 'command' => '/debug']);
+}
+if ($command === '/repairlinks') {
+    @set_time_limit(120);
+    ignore_user_abort(true);
+    telegram_send_message($chatId, '🛠️ Repairing product links… isme thoda time lagega.');
+
+    $batch = 8;
+    $query = 'select=id,title,original_url,affiliate_url&is_active=eq.true'
+        . '&order=created_at.asc&limit=' . $batch;
+    $result = supabase_request('GET', supabase_table() . '?' . $query, null, [
+        'service' => true,
+        'timeout' => 20,
+    ]);
+    if (!$result['ok'] || !is_array($result['data'])) {
+        telegram_send_message($chatId, '❌ Could not read products: ' . telegram_escape((string) $result['error']));
+        json_response(['ok' => true, 'command' => '/repairlinks', 'error' => 'read failed']);
+    }
+
+    $checked = 0;
+    $affiliated = 0;
+    $already = 0;
+    $hidden = 0;
+    $failed = 0;
+    $stopped = false;
+    $deadline = microtime(true) + 50;
+
+    foreach ($result['data'] as $row) {
+        if (!is_array($row) || microtime(true) >= $deadline) {
+            $stopped = microtime(true) >= $deadline;
+            break;
+        }
+        $id = (int) ($row['id'] ?? 0);
+        $originalUrl = trim((string) ($row['original_url'] ?? ''));
+        $affiliateUrl = trim((string) ($row['affiliate_url'] ?? ''));
+        if ($id < 1 || $originalUrl === '') {
+            continue;
+        }
+        $checked++;
+
+        $platform = detect_platform($originalUrl);
+        if (!is_product_page_url($originalUrl)
+            || is_blocked_platform($platform)
+            || is_blocked_url($originalUrl)) {
+            $patch = supabase_patch('id=eq.' . $id, ['is_active' => false]);
+            if ($patch['ok']) {
+                $hidden++;
+            } else {
+                $failed++;
+            }
+            continue;
+        }
+
+        $looksAffiliated = $affiliateUrl !== ''
+            && $affiliateUrl !== $originalUrl
+            && (bool) preg_match(
+                '~(?:earnkaro|ekaro|bitli|myntr\.it|ajiio\.in|fkrt\.it|dl\.flipkart\.com|shopsy\.in|amzn\.to|[?&](?:affid|affExtParam\d*|tag)=)~i',
+                $affiliateUrl
+            );
+        if ($looksAffiliated) {
+            $already++;
+            continue;
+        }
+
+        $conversion = convert_to_affiliate($originalUrl, $platform);
+        if (!$conversion['converted']) {
+            $failed++;
+            app_log('warning', 'Repair: EarnKaro conversion failed', [
+                'id'       => $id,
+                'platform' => $platform,
+                'error'    => $conversion['error'],
+            ]);
+            continue;
+        }
+
+        $patch = supabase_patch('id=eq.' . $id, [
+            'affiliate_url'  => $conversion['url'],
+            'last_synced_at' => gmdate('c'),
+        ]);
+        if ($patch['ok']) {
+            $affiliated++;
+        } else {
+            $failed++;
+        }
+    }
+
+    $summary = '✅ <b>Link repair finished</b>' . "\n"
+        . '• Checked: ' . $checked . "\n"
+        . '• Newly affiliated: ' . $affiliated . "\n"
+        . '• Already affiliated: ' . $already . "\n"
+        . '• Hidden (not a product page): ' . $hidden . "\n"
+        . '• Could not convert: ' . $failed;
+    if ($stopped) {
+        $summary .= "\n⏱️ Time limit reached — run /repairlinks again for the rest.";
+    } elseif ($checked >= $batch) {
+        $summary .= "\n🔁 More products may remain — run /repairlinks again.";
+    }
+    telegram_send_message($chatId, $summary);
+    json_response([
+        'ok'        => true,
+        'command'   => '/repairlinks',
+        'checked'   => $checked,
+        'affiliated'=> $affiliated,
+        'already'   => $already,
+        'hidden'    => $hidden,
+        'failed'    => $failed,
+    ]);
 }
 if ($command === '/id') {
     $userId = (string) ($message['from']['id'] ?? 'unknown');
@@ -216,6 +324,9 @@ foreach ($urls as $url) {
         }
         if ($platform === 'Other') {
             throw new RuntimeException('This is not a supported store product page. Send a direct product link, for example from Flipkart, Myntra or Amazon.');
+        }
+        if (!is_product_page_url($productUrl)) {
+            throw new RuntimeException('This is a listing or campaign page, not a single product page. Send the direct product page (Myntra: a /buy link, Flipkart: a /p/ link).');
         }
 
         $affiliate = convert_to_affiliate($productUrl, $platform);

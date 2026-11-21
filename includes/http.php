@@ -718,6 +718,11 @@ function is_probable_product_image(string $url): bool
     if ($path === '') {
         return false;
     }
+    // File names such as "mlogo.png" (Myntra's share image) have no separator
+    // before "logo", so check the basename separately.
+    if (preg_match('/logo|sprite|placeholder|no[-_]?image|default[-_]?image|favicon/i', basename($path))) {
+        return false;
+    }
     if (preg_match('~(?:^|[/_.-])(?:logo|logos|sprite|sprites|placeholder|noimage|no-image|default-image|default_image|site-icon|favicon|banner)(?:[/_.-]|$)~i', $path)) {
         return false;
     }

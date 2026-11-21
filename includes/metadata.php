@@ -164,6 +164,12 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): a
 {
     $candidates = [];
 
+    // A 200x200 OpenGraph image is almost always a site logo/share card, not
+    // the product photo. JSON-LD images are still allowed.
+    $ogWidth = (int) ($meta['og:image:width'] ?? 0);
+    $ogHeight = (int) ($meta['og:image:height'] ?? 0);
+    $ogTooSmall = $ogWidth > 0 && $ogHeight > 0 && min($ogWidth, $ogHeight) < 300;
+
     // JSON-LD product images are the most reliable product photos.
     if (isset($jsonProduct['image'])) {
         $image = $jsonProduct['image'];
@@ -193,6 +199,9 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): a
         if (is_array($entry) && isset($entry['key'], $entry['value'])
             && in_array($entry['key'], $imageKeys, true)
             && trim((string) $entry['value']) !== '') {
+            if ($ogTooSmall && str_starts_with($entry['key'], 'og:image')) {
+                continue;
+            }
             $candidates[] = trim((string) $entry['value']);
         }
     }
