@@ -302,6 +302,11 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         if ($minDiscount > 0) {
             $fallback .= '&discount_percent=gte.' . max(1, min(99, $minDiscount));
         }
+        if ($search !== '') {
+            $fallback .= '&or=(title.ilike.' . $pattern
+                . ',category.ilike.' . $pattern
+                . ',source_platform.ilike.' . $pattern . ')';
+        }
         $result = supabase_request('GET', supabase_table() . '?' . $fallback);
     }
     if (!$result['ok']) {
