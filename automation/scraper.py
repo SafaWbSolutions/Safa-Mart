@@ -277,8 +277,12 @@ def canonicalize_url(url: str) -> str:
         return url.strip()
 
     host = parts.hostname.lower().rstrip(".")
+    # Keep www for Flipkart (flipkart.com without www times out from cloud runners)
     if host.startswith("www."):
-        host = host[4:]
+        if host == "www.flipkart.com":
+            host = "www.flipkart.com"
+        else:
+            host = host[4:]
     scheme = "https" if detect_platform(url) != "Other" else parts.scheme.lower()
     port = parts.port
     netloc = host
@@ -408,8 +412,8 @@ def build_session() -> requests.Session:
     retry = Retry(
         total=3,
         connect=3,
-        read=2,
-        backoff_factor=1.0,
+        read=3,
+        backoff_factor=1.5,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset({"GET", "HEAD", "POST", "PATCH"}),
         respect_retry_after_header=True,
@@ -418,10 +422,21 @@ def build_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
+
+    chrome_major = "131"
     session.headers.update({
         "User-Agent": USER_AGENT,
         "Accept-Language": "en-IN,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        # Browser fingerprint headers (prevent Akamai/Cloudflare 403/timeout)
+        "sec-ch-ua": f'"Chromium";v="{chrome_major}", "Not_A Brand";v="24", "Google Chrome";v="{chrome_major}"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
     })
     return session
 
@@ -431,9 +446,14 @@ def safe_get(
     url: str,
     *,
     max_redirects: int = 5,
-    timeout: int = 15,
+    timeout: int = 30,
+    referer: str = "",
 ) -> requests.Response:
     current = url
+    extra_headers = {}
+    if referer:
+        extra_headers["Referer"] = referer
+        extra_headers["Sec-Fetch-Site"] = "same-origin"
     for _ in range(max_redirects + 1):
         if not is_safe_public_url(current):
             raise ScrapeError(f"Unsafe or non-public URL: {current}")
@@ -442,7 +462,8 @@ def safe_get(
                 current,
                 allow_redirects=False,
                 stream=True,
-                timeout=(8, timeout),
+                timeout=(10, timeout),
+                headers=extra_headers or None,
             )
         except requests.RequestException as error:
             raise ScrapeError(f"Network error: {error}") from error
@@ -453,6 +474,8 @@ def safe_get(
             if not location:
                 raise ScrapeError("Redirect response without a Location header.")
             current = urljoin(current, location)
+            # Update referer for redirects
+            extra_headers["Referer"] = current
             continue
         return response
     raise ScrapeError("Too many redirects.")
@@ -969,7 +992,15 @@ def upload_image(
 ) -> str:
     if not is_safe_public_url(image_url):
         raise ScrapeError("Unsafe image URL.")
-    response = safe_get(session, image_url, timeout=15)
+    # Use product page as referer for image downloads
+    referer = ""
+    if "flipkart.com" in image_url:
+        referer = "https://www.flipkart.com/"
+    elif "myntra.com" in image_url:
+        referer = "https://www.myntra.com/"
+    elif "amazon.in" in image_url or "amazon.com" in image_url:
+        referer = "https://www.amazon.in/"
+    response = safe_get(session, image_url, timeout=30, referer=referer)
     try:
         if response.status_code >= 400:
             raise ScrapeError(f"Image download failed with HTTP {response.status_code}.")
