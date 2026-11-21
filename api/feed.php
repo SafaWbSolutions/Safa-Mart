@@ -45,6 +45,14 @@ $response = http_request($url, [
     'referer'   => origin_of_url($url),
 ]);
 
+// Some stores (Ajio) answer 403 to this server's IP; retry via the reader.
+if (!$response['ok'] || (int) $response['status'] !== 200) {
+    $reader = http_request_via_reader($url);
+    if ($reader['ok']) {
+        $response = $reader;
+    }
+}
+
 if (!$response['ok']) {
     app_log('warning', 'Feed proxy fetch failed', [
         'url'    => $url,

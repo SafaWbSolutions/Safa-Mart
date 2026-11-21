@@ -29,7 +29,7 @@ from io import BytesIO
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote_plus, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -1212,6 +1212,109 @@ def extract_product_links(html: str, base_url: str, limit: int) -> list[str]:
     return links
 
 
+def ajio_search_fallback(
+    session: requests.Session,
+    product_url: str,
+) -> Optional[dict[str, Any]]:
+    """
+    Ajio product pages answer HTTP 403 (even through the reader), but the public
+    search page embeds name, price, MRP and images for every result. GitHub
+    Actions uses this instead of the blocked product page.
+    """
+    code_match = re.search(r"/p/(\d{5,})", product_url)
+    if not code_match:
+        return None
+    code = code_match.group(1)
+
+    path = urlsplit(product_url).path or ""
+    slug = re.sub(r"/p/.*$", "", path)
+    words = re.sub(r"[^a-z0-9]+", " ", slug, flags=re.I).strip()
+    if not words:
+        return None
+    search_url = "https://www.ajio.com/search/?text=" + quote_plus(words[:120])
+
+    try:
+        html, status, _ = fetch_html(session, search_url)
+    except ScrapeError as error:
+        LOGGER.info("Ajio search fallback failed for %s: %s", product_url, error)
+        return None
+    if status >= 400 or not html:
+        return None
+
+    # The code also appears in the page's JSON-LD image names, so pick the
+    # occurrence that actually carries the price + gallery data.
+    window = ""
+    for match in re.finditer(re.escape(code), html):
+        candidate = html[max(0, match.start() - 1500): match.start() + 8000]
+        if '"price":{"currencyIso":"INR"' in candidate and '"images":[' in candidate:
+            window = candidate
+            break
+    if not window:
+        return None
+
+    price = 0.0
+    price_match = re.search(
+        r'"price":\{"currencyIso":"INR","formattedValue":"[^"]*",'
+        r'"displayformattedValue":"[^"]*","value":([0-9.]+)\}',
+        window,
+    )
+    if price_match:
+        price = float(price_match.group(1))
+    if price <= 0:
+        offer_match = re.search(r'"offerPrice":\{[^}]*"value":([0-9.]+)', window)
+        if offer_match:
+            price = float(offer_match.group(1))
+
+    mrp = 0.0
+    was_match = re.search(r'"wasPriceData":\{[^}]*"value":([0-9.]+)', window)
+    if was_match:
+        mrp = float(was_match.group(1))
+    if mrp < price:
+        mrp = price
+
+    name = ""
+    name_match = re.search(r'"name":"([^"]+)"', window)
+    if name_match:
+        name = clean_text(name_match.group(1))
+    brand = ""
+    brand_match = re.search(r'"brandName":"([^"]+)"', window)
+    if brand_match:
+        brand = clean_text(brand_match.group(1))
+    if not name:
+        return None
+    title = name if not brand or brand.lower() in name.lower() else f"{brand} {name}"
+
+    images: list[str] = []
+    images_match = re.search(r'"images":\[(.*?)\]', window, re.S)
+    if images_match:
+        for image_url in re.findall(r'"url":"(https://assets\.ajio\.com/[^"]+)"', images_match.group(1)):
+            image_url = image_url.replace("\\/", "/")
+            if image_url not in images:
+                images.append(image_url)
+    if not images:
+        return None
+
+    category_hint = ""
+    hint_match = re.search(r'"brickNameText":"([^"]+)"', window)
+    if hint_match:
+        category_hint = clean_text(hint_match.group(1))
+
+    return {
+        "title": title,
+        "description": "",
+        "image": images[0],
+        "images": images[:3],
+        "price": price,
+        "mrp": mrp,
+        "currency": "INR",
+        "brand": brand,
+        "category_hint": category_hint,
+        "availability": "unknown",
+        "platform": "Ajio",
+        "canonical_url": product_url,
+    }
+
+
 def build_product_payload(
     config: Config,
     session: requests.Session,
@@ -1225,12 +1328,20 @@ def build_product_payload(
         raise ScrapeError("Product URL is not from a supported store.")
 
     html, status, final_url = fetch_html(session, product_url)
-    if status >= 400:
-        raise ScrapeError(f"Product page returned HTTP {status}.")
-    if not html:
-        raise ScrapeError("Product page was empty.")
+    metadata: Optional[dict[str, Any]] = None
 
-    metadata = parse_metadata(html, final_url)
+    if status < 400 and html:
+        metadata = parse_metadata(html, final_url)
+        if (metadata["price"] <= 0 or not metadata["images"]) and detect_platform(product_url) == "Ajio":
+            fallback = ajio_search_fallback(session, product_url)
+            if fallback is not None:
+                metadata = fallback
+    elif detect_platform(product_url) == "Ajio":
+        metadata = ajio_search_fallback(session, product_url)
+
+    if metadata is None:
+        raise ScrapeError(f"Product page returned HTTP {status}.")
+
     if metadata["availability"] == "out_of_stock":
         raise ScrapeError("Product is out of stock.")
     if metadata["price"] <= 0:
