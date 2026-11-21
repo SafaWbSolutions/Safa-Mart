@@ -488,6 +488,15 @@ function is_affiliate_url(string $url): bool
         }
     }
 
+    // EarnKaro autopost "short links" option inhe use karta hai. Inhe affiliate
+    // maan lete hain taaki shortener ki wajah se tracking link na toote.
+    $shortLinkHosts = ['bit.ly', 'cutt.ly', 'tinyurl.com', 'rb.gy', 'shorturl.at', 'tiny.one'];
+    foreach ($shortLinkHosts as $domain) {
+        if ($host === $domain || str_ends_with($host, '.' . $domain)) {
+            return true;
+        }
+    }
+
     // Flipkart's affiliate short link.
     if ($host === 'dl.flipkart.com' && str_starts_with($path, '/s/')) {
         return true;
