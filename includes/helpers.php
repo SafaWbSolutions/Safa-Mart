@@ -442,30 +442,23 @@ function storefront_exclusion_query(): string
 
     $platforms = blocked_platform_names();
     if ($platforms) {
-        $quoted = [];
+        $tokens = [];
         foreach ($platforms as $platform) {
             // PostgREST `in.()` values must stay single tokens; "Hamara Mall"
             // becomes HamaraMall so both spellings block the same store.
             $token = preg_replace('/[^A-Za-z0-9_-]/', '', $platform);
-            if ($token !== '' && !in_array($token, $quoted, true)) {
-                $quoted[] = $token;
+            if ($token !== '' && !in_array($token, $tokens, true)) {
+                $tokens[] = $token;
             }
         }
-        if ($quoted) {
-            $parts[] = 'source_platform=not.in.(' . implode(',', $quoted) . ')';
+        if ($tokens) {
+            $parts[] = 'source_platform=not.in.(' . implode(',', $tokens) . ')';
         }
     }
 
-    $likes = [];
-    foreach (blocked_domains() as $domain) {
-        $pattern = '*' . str_replace('*', '', $domain) . '*';
-        $likes[] = 'original_url.ilike.' . $pattern;
-        $likes[] = 'affiliate_url.ilike.' . $pattern;
-    }
-    if ($likes) {
-        $parts[] = 'not.or=(' . implode(',', $likes) . ')';
-    }
-
+    // Skip the complex not.or clause with URL patterns — it can break on older
+    // PostgREST builds. The PHP-side filter in fetch_storefront_products()
+    // handles domain-based blocking reliably.
     return $parts === [] ? '' : '&' . implode('&', $parts);
 }
 
