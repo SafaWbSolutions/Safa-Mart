@@ -89,6 +89,10 @@ EARNKARO_PLATFORMS = {
     "IKEA", "JioMart", "BigBasket",
 }
 
+# EarnKaro ka public link-converter endpoint. Purana api.earnkaro.com/v1/convert
+# CloudFront par 403 deta tha (wo koi API hi nahi hai).
+DEFAULT_EARNKARO_API_URL = "https://ekaro-api.affiliaters.in/api/converter/public"
+
 # Stores that must never be listed or shown. Domain entries match the host and
 # its subdomains; entries without a dot match the host as a substring so
 # "hamaramall" covers hamaramall.in / .com / .shop.
@@ -748,6 +752,10 @@ class Config:
         skip_stock = args.skip_stock_check or env("SKIP_STOCK_CHECK").lower() in ("1", "true", "yes", "on")
         stock_limit = env_int("STOCK_CHECK_LIMIT", 200)
 
+        earnkaro_url = env("EARNKARO_API_URL", DEFAULT_EARNKARO_API_URL).strip()
+        if not earnkaro_url or "api.earnkaro.com" in earnkaro_url:
+            earnkaro_url = DEFAULT_EARNKARO_API_URL
+
         return cls(
             supabase_url=supabase_url,
             service_key=env("SUPABASE_SERVICE_KEY"),
@@ -755,7 +763,7 @@ class Config:
             upload_secret=env("UPLOAD_API_SECRET"),
             upload_endpoint=upload_endpoint,
             earnkaro_token=env("EARNKARO_TOKEN"),
-            earnkaro_url=env("EARNKARO_API_URL", "https://api.earnkaro.com/v1/convert").strip(),
+            earnkaro_url=earnkaro_url,
             feeds=feeds,
             max_products=max(1, min(500, max_products)),
             per_feed=max(1, min(100, per_feed)),
@@ -918,44 +926,67 @@ def convert_affiliate(config: Config, session: requests.Session, url: str, platf
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
-    response: Optional[requests.Response] = None
+    # EarnKaro converter payload: {"deal": "<url>", "convert_option": "convert_only"}
     try:
         response = session.post(
             config.earnkaro_url,
-            json={"url": url},
+            json={"deal": url, "convert_option": "convert_only"},
             headers=headers,
             timeout=(8, 15),
             allow_redirects=False,
         )
-        if 200 <= response.status_code < 300:
-            try:
-                found = find_affiliate_url(response.json())
-            except ValueError:
-                found = find_affiliate_url(response.text)
-            if found:
-                LOGGER.info("Converted %s link with EarnKaro", platform)
-                return found
-
-        fallback = session.get(
-            config.earnkaro_url,
-            params={"url": url},
-            headers={"Authorization": headers["Authorization"], "Accept": "application/json"},
-            timeout=(8, 15),
-            allow_redirects=True,
-        )
-        if 200 <= fallback.status_code < 300:
-            try:
-                found = find_affiliate_url(fallback.json())
-            except ValueError:
-                found = find_affiliate_url(fallback.text)
-            if found:
-                LOGGER.info("Converted %s link with EarnKaro (GET fallback)", platform)
-                return found
     except requests.RequestException as error:
         LOGGER.warning("EarnKaro request failed for %s: %s", platform, error)
+        return url
 
-    status = response.status_code if response is not None else "n/a"
-    LOGGER.warning("EarnKaro conversion failed (status %s); keeping original URL", status)
+    if response.status_code in (401, 403):
+        LOGGER.error(
+            "EarnKaro rejected the API token (HTTP %s); update EARNKARO_TOKEN",
+            response.status_code,
+        )
+        return url
+    if not 200 <= response.status_code < 300:
+        LOGGER.warning(
+            "EarnKaro conversion failed (status %s); keeping original URL",
+            response.status_code,
+        )
+        return url
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    converted: Optional[str] = None
+    api_message = ""
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if isinstance(data, str):
+            candidate = data.strip()
+            if candidate.startswith(("http://", "https://")):
+                converted = candidate
+            else:
+                api_message = candidate
+        if not api_message:
+            message = payload.get("message")
+            if isinstance(message, str):
+                api_message = message.strip()
+    if converted is None and isinstance(payload, (dict, list)):
+        # Safety net for any alternate response shape.
+        converted = find_affiliate_url(payload)
+
+    if converted:
+        LOGGER.info("Converted %s link with EarnKaro", platform)
+        return converted
+
+    if api_message:
+        LOGGER.warning(
+            "EarnKaro could not convert %s link: %s",
+            platform,
+            api_message,
+        )
+    else:
+        LOGGER.warning("EarnKaro conversion failed; keeping original URL")
     return url
 
 

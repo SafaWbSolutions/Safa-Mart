@@ -97,7 +97,19 @@ if ($command === '/debug') {
 
     $resolved = resolve_merchant_url($debugUrl);
     $lines[] = '• Resolved: ' . telegram_escape($resolved);
-    $lines[] = '• Platform: ' . telegram_escape(detect_platform($resolved));
+    $debugPlatform = detect_platform($resolved);
+    $lines[] = '• Platform: ' . telegram_escape($debugPlatform);
+
+    if (!in_array($debugPlatform, EARNKARO_PLATFORMS, true)) {
+        $lines[] = '• EarnKaro: this store is not in the supported list';
+    } else {
+        $affiliate = convert_to_affiliate($resolved, $debugPlatform);
+        $lines[] = '• EarnKaro: ' . ($affiliate['converted'] ? '✅ converted' : '❌ not converted');
+        $lines[] = '• Affiliate URL: ' . telegram_escape($affiliate['url']);
+        if (!$affiliate['converted'] && !empty($affiliate['error'])) {
+            $lines[] = '• EarnKaro error: ' . telegram_escape($affiliate['error']);
+        }
+    }
 
     telegram_send_message($chatId, implode("\n", $lines));
     json_response(['ok' => true, 'command' => '/debug']);

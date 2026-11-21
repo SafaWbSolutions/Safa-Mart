@@ -859,41 +859,70 @@ function convert_to_affiliate(string $url, ?string $platform = null): array
         'Accept: application/json',
     ];
 
+    // EarnKaro ka converter is payload shape ko expect karta hai:
+    // {"deal": "<product url>", "convert_option": "convert_only"}
     $response = http_request(EARNKARO_API_URL, [
         'method'    => 'POST',
-        'json'      => ['url' => $url],
+        'json'      => [
+            'deal'           => $url,
+            'convert_option' => 'convert_only',
+        ],
         'headers'   => $headers,
         'timeout'   => EARNKARO_TIMEOUT,
         'max_bytes' => 1048576,
     ]);
 
+    $status = (int) ($response['status'] ?? 0);
+    $decoded = null;
+    if ($response['ok'] && $status >= 200 && $status < 300) {
+        $decoded = json_decode((string) $response['body'], true);
+    }
+
     $found = null;
-    if ($response['ok'] && $response['status'] >= 200 && $response['status'] < 300) {
-        $decoded = json_decode($response['body'], true);
-        $found = find_affiliate_url_in_response($decoded !== null ? $decoded : $response['body']);
+    $apiMessage = '';
+    if (is_array($decoded)) {
+        // Success shape: {"success":1,"data":"https://..."}
+        // Failure shape: {"success":1,"data":"We could not locate..."}
+        if (isset($decoded['data']) && is_string($decoded['data'])) {
+            $candidate = trim($decoded['data']);
+            if (preg_match('#^https?://#i', $candidate)) {
+                $found = $candidate;
+            } else {
+                $apiMessage = $candidate;
+            }
+        }
+        if ($apiMessage === '' && isset($decoded['message']) && is_string($decoded['message'])) {
+            $apiMessage = trim($decoded['message']);
+        }
+        if ($found === null) {
+            // Safety net for any alternate response shape.
+            $found = find_affiliate_url_in_response($decoded);
+        }
     }
 
-    if ($found === null && $response['status'] !== 0) {
-        app_log('warning', 'EarnKaro POST returned no affiliate URL', [
-            'platform' => $platform,
-            'status'   => $response['status'],
-            'error'    => $response['error'],
-        ]);
-    }
-
-    if ($found !== null && preg_match('#^https?://#i', $found)) {
+    if ($found !== null) {
         return ['url' => $found, 'platform' => $platform, 'converted' => true, 'error' => null];
     }
 
+    if ($status === 401 || $status === 403) {
+        $reason = 'EarnKaro rejected the API token (HTTP ' . $status . '); update EARNKARO_TOKEN.';
+    } elseif ($apiMessage !== '') {
+        $reason = 'EarnKaro could not convert this link: ' . $apiMessage;
+    } else {
+        $reason = 'EarnKaro conversion failed; the original URL was kept.';
+    }
+
     app_log('warning', 'EarnKaro conversion failed; keeping original URL', [
-        'platform' => $platform,
-        'status'   => $response['status'],
-        'error'    => $response['error'],
+        'platform'    => $platform,
+        'status'      => $status,
+        'api_message' => $apiMessage,
+        'error'       => $response['error'],
     ]);
+
     return [
         'url' => $url,
         'platform' => $platform,
         'converted' => false,
-        'error' => 'EarnKaro conversion failed; the original URL was kept.',
+        'error' => $reason,
     ];
 }

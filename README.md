@@ -96,8 +96,10 @@ return [
     'TELEGRAM_ALLOWED_CHAT_IDS'=> '123456789', // comma-separated; use /id in the bot
 
     'EARNKARO_TOKEN'           => 'YOUR-EARNKARO-API-TOKEN',
-    // Change if EarnKaro gives you a different converter endpoint:
-    'EARNKARO_API_URL'         => 'https://api.earnkaro.com/v1/convert',
+    // EarnKaro's public link converter (ek.affiliaters.in JWT):
+    'EARNKARO_API_URL'         => 'https://ekaro-api.affiliaters.in/api/converter/public',
+    // Optional: 3-15 seconds. Keep it small so autoposting never hangs.
+    'EARNKARO_TIMEOUT'         => 8,
 
     'UPLOAD_API_SECRET'        => 'a-different-long-random-upload-secret',
     'PRODUCTS_PER_PAGE'        => 24,
@@ -186,7 +188,7 @@ Telegram retries the same update if it does not receive HTTP 200. The webhook de
 
 ### EarnKaro endpoint
 
-EarnKaro's converter endpoint is account/API-version specific. The code defaults to `https://api.earnkaro.com/v1/convert`, tries a JSON `POST {"url": "..."}` and then a `GET ?url=...` fallback, and accepts several common response shapes (`affiliate_url`, `converted_url`, `short_url`, nested `data`, plain URL). If your dashboard documents a different URL, set `EARNKARO_API_URL`. If conversion fails, the product is still listed with the original URL and the bot shows a warning.
+The converter is `https://ekaro-api.affiliaters.in/api/converter/public` with `Authorization: Bearer <EARNKARO_TOKEN>` and body `{"deal": "<product url>", "convert_option": "convert_only"}`. Success looks like `{"success":1,"data":"https://..."}`; a failure message in `data` means the store/product is not eligible (the original URL is kept and the bot shows a warning). The token must be the JWT issued by **ek.affiliaters.in** after your EarnKaro account is linked. Old `api.earnkaro.com` values are migrated automatically. For Flipkart, EarnKaro requires your own Flipkart tag; ask your EarnKaro account manager to generate it in **ek.affiliaters.in → Affiliate Settings**.
 
 ---
 

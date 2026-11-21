@@ -86,10 +86,18 @@ safa_define('TELEGRAM_WEBHOOK_SECRET', trim((string) safa_config_value('TELEGRAM
 safa_define('TELEGRAM_ALLOWED_CHAT_IDS', trim((string) safa_config_value('TELEGRAM_ALLOWED_CHAT_IDS', '')));
 
 safa_define('EARNKARO_TOKEN', trim((string) safa_config_value('EARNKARO_TOKEN', '')));
-safa_define('EARNKARO_API_URL', trim((string) safa_config_value(
+// EarnKaro ka public link-converter endpoint. Purana api.earnkaro.com/v1/convert
+// CloudFront par 403 deta tha (wo koi API hi nahi hai), isliye purani value
+// automatically yahan migrate ho jati hai.
+$safaEarnKaroUrl = trim((string) safa_config_value(
     'EARNKARO_API_URL',
-    'https://api.earnkaro.com/v1/convert'
-)));
+    'https://ekaro-api.affiliaters.in/api/converter/public'
+));
+if ($safaEarnKaroUrl === '' || stripos($safaEarnKaroUrl, 'api.earnkaro.com') !== false) {
+    $safaEarnKaroUrl = 'https://ekaro-api.affiliaters.in/api/converter/public';
+}
+safa_define('EARNKARO_API_URL', $safaEarnKaroUrl);
+unset($safaEarnKaroUrl);
 // EarnKaro ki API kabhi-kabhi slow hoti hai; autopost ko block na kare isliye
 // timeout chhota rakha hai. Isse EARNKARO_TIMEOUT env/local config se badha-ghata sakte hain.
 safa_define('EARNKARO_TIMEOUT', max(3, min(15, (int) safa_config_value('EARNKARO_TIMEOUT', 8))));
