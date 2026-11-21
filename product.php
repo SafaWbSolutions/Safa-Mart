@@ -162,11 +162,23 @@ foreach ($specs as $spec) {
 usort($spareSpecs, static function (array $a, array $b): int {
     return $a[0] <=> $b[0];
 });
+$usedNoteTopics = [];
 foreach ($spareSpecs as $entry) {
     if (count($descriptionHighlights) >= 3) {
         break;
     }
     $spec = $entry[1];
+    $specKey = strtolower((string) ($spec['key'] ?? ''));
+    $topic = preg_match('/sleeve/', $specKey) ? 'sleeve'
+        : (preg_match('/pattern/', $specKey) ? 'pattern'
+        : (preg_match('/occasion/', $specKey) ? 'occasion'
+        : (preg_match('/length/', $specKey) ? 'length' : '')));
+    if ($topic !== '') {
+        if (isset($usedNoteTopics[$topic])) {
+            continue;
+        }
+        $usedNoteTopics[$topic] = true;
+    }
     $line = trim((string) ($spec['key'] ?? '')) . ': ' . truncate_text((string) ($spec['value'] ?? ''), 70);
     $key = strtolower(rtrim($line, " ."));
     if (isset($seenHighlights[$key])) {
