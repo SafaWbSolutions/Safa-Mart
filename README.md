@@ -236,7 +236,8 @@ When a merchant blocks the web server itself (Ajio answers `HTTP 403` to datacen
 2. Extracts product links from anchors and embedded JSON, and filters to supported marketplaces.
 3. Scrapes OpenGraph/JSON-LD metadata and skips out-of-stock or priceless products.
 4. Converts affiliate links, downloads images, re-encodes them with Pillow, and uploads to `/api/upload.php` using `X-API-SECRET`.
-5. Applies the **best-deal filter**: a brand-new product is published only when its discount is at least `MIN_DISCOUNT_PERCENT` (default `40`); an existing product is updated only when its price has dropped.
+5. Applies the **best-deal filter**: a brand-new product is published only when its discount is at least `MIN_DISCOUNT_PERCENT` (default `40`); an existing product is updated only when its price has dropped. The filter runs before images are uploaded, so skipped deals leave no orphan files.
+6. A run that finds no best deals is a normal **green** run; the workflow only fails when the sync itself crashes.
 5. Upserts batches of up to 50 products with `resolution=merge-duplicates`.
 6. Checks up to `STOCK_CHECK_LIMIT` (150) active products:
    - `404` / `410` or clear out-of-stock → `is_active = false`.

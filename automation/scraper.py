@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
@@ -723,6 +723,26 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
         )
         if mrp_match:
             mrp = normalize_price(mrp_match.group(1))
+
+    # Myntra (and a few others) expose MRP only as a JSON key, sometimes
+    # escaped inside a Next.js payload (\"mrp\":499).
+    if mrp <= 0:
+        json_mrp = re.search(
+            r'\\?"mrp\\?"\s*:\s*"?([0-9][0-9,]*(?:\.[0-9]{1,2})?)',
+            html[:500000],
+            re.I,
+        )
+        if json_mrp:
+            mrp = normalize_price(json_mrp.group(1))
+
+    # Last resort: derive MRP from the "45% OFF" label shown on the page.
+    if mrp <= price:
+        off_match = re.search(r'(\d{1,2})\s*%\s*OFF', html[:500000], re.I)
+        if off_match:
+            off = int(off_match.group(1))
+            if 0 < off < 90 and price > 0:
+                mrp = round(price / (1 - off / 100), 2)
+
     if mrp < price:
         mrp = price
 
@@ -1197,6 +1217,7 @@ def build_product_payload(
     session: requests.Session,
     product_url: str,
     feed_hint: str = "",
+    deal_check: Optional[Callable[[dict[str, Any]], bool]] = None,
 ) -> Optional[dict[str, Any]]:
     if not is_safe_public_url(product_url):
         raise ScrapeError("Product URL is unsafe.")
@@ -1229,6 +1250,23 @@ def build_product_payload(
         # Storefront sirf affiliate products dikhata hai, isliye bina link wale
         # product ko DB me daalne ka koi fayda nahi.
         raise ScrapeError("EarnKaro did not create an affiliate link; product skipped.")
+
+    price = float(metadata["price"])
+    mrp = float(metadata["mrp"] if metadata["mrp"] >= price else price)
+    discount = discount_percent(mrp, price)
+
+    # Decide before downloading/uploading images, otherwise skipped deals leave
+    # orphan WebP files behind and waste time.
+    if deal_check is not None and not deal_check({
+        "original_url": canonical,
+        "title": metadata["title"],
+        "price": price,
+        "mrp": mrp,
+        "discount_percent": discount,
+        "source_platform": platform,
+    }):
+        return None
+
     slug = make_slug(metadata["title"])
 
     gallery: list[str] = []
@@ -1251,15 +1289,13 @@ def build_product_payload(
     if category == "Other" and feed_hint in VALID_CATEGORIES:
         category = feed_hint
 
-    price = float(metadata["price"])
-    mrp = float(metadata["mrp"] if metadata["mrp"] >= price else price)
     return {
         "slug": slug,
         "title": truncate(metadata["title"], 300),
         "description": truncate(metadata["description"], 1800),
         "price": price,
         "mrp": mrp,
-        "discount_percent": discount_percent(mrp, price),
+        "discount_percent": discount,
         "category": category,
         "source_platform": platform,
         "thumbnail_url": gallery[0],
@@ -1431,6 +1467,31 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
         if not config.dry_run:
             client = SupabaseClient(config)
 
+        def deal_check(preview: dict[str, Any]) -> bool:
+            decision = deal_decision(client, config, preview)
+            if decision == "skip_discount":
+                deal_stats["low_discount"] += 1
+                LOGGER.info(
+                    "Skipped by deal filter: %s (only %s%% off, needs %s%%)",
+                    truncate(str(preview.get("title") or ""), 60),
+                    preview.get("discount_percent", 0),
+                    config.min_discount,
+                )
+                return False
+            if decision == "skip_no_drop":
+                deal_stats["no_drop"] += 1
+                LOGGER.info(
+                    "Skipped by deal filter: %s (no price drop, still ₹%s)",
+                    truncate(str(preview.get("title") or ""), 60),
+                    preview.get("price", 0),
+                )
+                return False
+            if decision == "drop":
+                deal_stats["drops"] += 1
+            else:
+                deal_stats["new"] += 1
+            return True
+
         for feed in config.feeds:
             if len(collected) >= config.max_products:
                 break
@@ -1463,30 +1524,8 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
                     if config.dry_run:
                         preview_product(config, session, link)
                     else:
-                        payload = build_product_payload(config, session, link, hint)
+                        payload = build_product_payload(config, session, link, hint, deal_check=deal_check)
                         if payload:
-                            decision = deal_decision(client, config, payload)
-                            if decision == "skip_discount":
-                                deal_stats["low_discount"] += 1
-                                LOGGER.info(
-                                    "Skipped by deal filter: %s (only %s%% off, needs %s%%)",
-                                    truncate(payload["title"], 60),
-                                    payload["discount_percent"],
-                                    config.min_discount,
-                                )
-                                continue
-                            if decision == "skip_no_drop":
-                                deal_stats["no_drop"] += 1
-                                LOGGER.info(
-                                    "Skipped by deal filter: %s (no price drop, still ₹%s)",
-                                    truncate(payload["title"], 60),
-                                    payload["price"],
-                                )
-                                continue
-                            if decision == "drop":
-                                deal_stats["drops"] += 1
-                            else:
-                                deal_stats["new"] += 1
                             collected[payload["original_url"]] = payload
                             LOGGER.info(
                                 "Prepared: %s | ₹%s | %s | %s%% off",

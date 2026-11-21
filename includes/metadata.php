@@ -341,7 +341,11 @@ function extract_price_from_text(string $text): float
 
 function extract_mrp_from_text(string $text): float
 {
-    if (preg_match('/(?:M\.?\s*R\.?\s*P\.?|originalPrice|listPrice|strikePrice|markedPrice)[^0-9]{0,60}(?:₹|Rs\.?|INR)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i', $text, $match)) {
+    // Myntra keeps MRP only in JSON, sometimes escaped inside a Next.js payload.
+    if (preg_match('/\\\\?"mrp\\\\?"\s*:\s*"?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i', $text, $match)) {
+        return normalize_price($match[1]);
+    }
+    if (preg_match('/(?:M\.?\s*R\.?\s*P\.?|originalPrice|listPrice|strikePrice|markedPrice)[^0-9]{0,20}(?:₹|Rs\.?|INR)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i', $text, $match)) {
         return normalize_price($match[1]);
     }
     return 0.0;
@@ -795,6 +799,13 @@ function scrape_product_metadata(string $url): array
     }
     if ($mrp <= 0) {
         $mrp = extract_mrp_from_text($html);
+    }
+    // Last resort: derive MRP from the "45% OFF" label on the page.
+    if ($mrp <= $price && $price > 0 && preg_match('/(\d{1,2})\s*%\s*OFF/i', $html, $offMatch)) {
+        $off = (int) $offMatch[1];
+        if ($off > 0 && $off < 90) {
+            $mrp = round($price / (1 - $off / 100), 2);
+        }
     }
     if ($mrp < $price) {
         $mrp = $price;

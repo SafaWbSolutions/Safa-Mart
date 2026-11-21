@@ -100,21 +100,25 @@ jobs:
             echo "sync.log not found." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Fail when nothing was prepared
+      - name: Verify the sync finished
         if: always()
         run: |
           if [ ! -f automation/sync.log ]; then
-            echo "::warning::sync.log missing; skipping the zero-product check."
+            echo "::warning::sync.log missing; skipping the result check."
             exit 0
           fi
           if grep -q "\[dry-run\]" automation/sync.log; then
             exit 0
           fi
-          if grep -q "Prepared:" automation/sync.log; then
-            echo "Products were prepared this run."
+          if grep -q "Sync finished successfully" automation/sync.log; then
+            if grep -q "Prepared:" automation/sync.log; then
+              echo "Products were prepared this run."
+            else
+              echo "::notice::No new best deals this run. The sync completed normally."
+            fi
             exit 0
           fi
-          echo "::error::No products were prepared. Open the sync.log artifact for 403/timeout details."
+          echo "::error::The sync did not finish. Open the sync.log artifact for details."
           exit 1
 
       - name: Upload sync log
