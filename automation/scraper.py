@@ -943,8 +943,27 @@ class SupabaseClient:
             LOGGER.info("Upserted batch of %d products", len(chunk))
         return saved
 
-    def existing_price(self, original_url: str) -> Optional[float]:
-        """Price already stored for this product, or None when it is new."""
+    def patch_metadata(self, preview: dict[str, Any]) -> None:
+        """Backfill brand/rating/description on an existing product."""
+        original_url = str(preview.get("original_url") or "")
+        if not original_url:
+            return
+        values: dict[str, Any] = {
+            "brand": truncate(str(preview.get("brand") or ""), 120),
+            "rating": float(preview.get("rating") or 0),
+            "rating_count": int(preview.get("rating_count") or 0),
+            "last_checked_at": utc_now(),
+        }
+        description = str(preview.get("description") or "")
+        if description:
+            values["description"] = truncate(description, 1800)
+        query = urlencode({"original_url": f"eq.{original_url}"})
+        try:
+            self._request("PATCH", f"{self.table}?{query}", json=values)
+        except ScrapeError as error:
+            LOGGER.info("Metadata backfill skipped for %s: %s", original_url, error)
+
+    def existing_price(self, original_url: str) -> Optional[float]:        """Price already stored for this product, or None when it is new."""
         if not original_url:
             return None
         if original_url in self._price_cache:
@@ -1391,9 +1410,13 @@ def build_product_payload(
     if deal_check is not None and not deal_check({
         "original_url": canonical,
         "title": metadata["title"],
+        "description": metadata.get("description", ""),
         "price": price,
         "mrp": mrp,
         "discount_percent": discount,
+        "brand": metadata.get("brand", ""),
+        "rating": metadata.get("rating", 0),
+        "rating_count": metadata.get("rating_count", 0),
         "source_platform": platform,
     }):
         return None
@@ -1619,6 +1642,8 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
                     truncate(str(preview.get("title") or ""), 60),
                     preview.get("price", 0),
                 )
+                # Still refresh brand/rating/description for the existing row.
+                client.patch_metadata(preview)
                 return False
             if decision == "drop":
                 deal_stats["drops"] += 1
