@@ -285,6 +285,22 @@ button {
     background: #111827;
     border-color: #111827;
     color: #fff;
+    animation: safa-pill-pop .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+/* Tapped tab: spinner in place of the colour dot until results land. */
+.platform-pill.is-loading {
+    pointer-events: none;
+    cursor: progress;
+}
+
+.platform-pill.is-loading .platform-dot {
+    width: 13px;
+    height: 13px;
+    background: transparent !important;
+    border: 2px solid rgba(255, 255, 255, .35);
+    border-top-color: #fff;
+    animation: safa-spin .65s linear infinite;
 }
 
 .platform-dot {
@@ -494,6 +510,29 @@ button {
     text-decoration: underline;
 }
 
+.clear-filters[hidden] {
+    display: none !important;
+}
+
+/* Category chip spinner while a category request is in flight. */
+.category-chip.is-loading {
+    pointer-events: none;
+    cursor: progress;
+}
+
+.category-chip.is-loading::after {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-left: 6px;
+    vertical-align: -1px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: safa-spin .65s linear infinite;
+}
+
 /* ---------- Product grid & cards ---------- */
 .product-grid {
     display: grid;
@@ -501,6 +540,35 @@ button {
     gap: 10px;
     align-items: start;
 }
+
+/* Filter switching feedback: a slim progress bar while results load. */
+.products-section.is-loading::before {
+    content: "";
+    display: block;
+    height: 3px;
+    margin: 0 0 12px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(233, 30, 99, 0) 0%, var(--brand) 50%, rgba(233, 30, 99, 0) 100%);
+    background-size: 200% 100%;
+    animation: safa-progress 1s linear infinite;
+}
+
+/* Cards glide in so a store/category switch is visibly a fresh list. */
+.products-section .product-grid .product-card {
+    animation: safa-card-in .4s cubic-bezier(.22, .61, .36, 1) backwards;
+}
+
+.products-section .product-grid .product-card:nth-child(2) { animation-delay: .03s; }
+.products-section .product-grid .product-card:nth-child(3) { animation-delay: .06s; }
+.products-section .product-grid .product-card:nth-child(4) { animation-delay: .09s; }
+.products-section .product-grid .product-card:nth-child(5) { animation-delay: .12s; }
+.products-section .product-grid .product-card:nth-child(6) { animation-delay: .15s; }
+.products-section .product-grid .product-card:nth-child(7) { animation-delay: .18s; }
+.products-section .product-grid .product-card:nth-child(8) { animation-delay: .21s; }
+.products-section .product-grid .product-card:nth-child(9) { animation-delay: .24s; }
+.products-section .product-grid .product-card:nth-child(10) { animation-delay: .27s; }
+.products-section .product-grid .product-card:nth-child(11) { animation-delay: .3s; }
+.products-section .product-grid .product-card:nth-child(12) { animation-delay: .33s; }
 
 .product-card {
     position: relative;
@@ -2223,4 +2291,41 @@ button {
 @media (max-width: 720px) {
     .specs-grid { grid-template-columns: 1fr; }
     .product-specs { padding: 18px; }
+}
+
+/* ---------- Filter switch motion ---------- */
+@keyframes safa-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes safa-pill-pop {
+    0% { transform: scale(.94); }
+    55% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+}
+
+@keyframes safa-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes safa-progress {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .platform-pill.is-active,
+    .platform-pill.is-loading .platform-dot,
+    .category-chip.is-loading::after,
+    .products-section.is-loading::before,
+    .products-section .product-grid .product-card {
+        animation: none !important;
+    }
 }

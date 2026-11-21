@@ -653,20 +653,22 @@ if (SUPABASE_URL !== '') {
                     <?php
                     if ($searchQuery !== '') {
                         echo 'Results for “' . e($searchQuery) . '”';
+                    } elseif ($category !== '') {
+                        echo e($category) . ' deals';
+                    } elseif ($platform !== '') {
+                        echo e($platform) . ' deals';
                     } elseif ($hasFilters) {
-                        echo e($category !== '' ? $category : ($platform !== '' ? $platform : 'Deals'));
+                        echo 'Filtered deals';
                     } else {
                         echo 'Handpicked deals';
                     }
                     ?>
                 </h2>
-                <p id="resultCount">
+                <p id="resultCount" aria-live="polite">
                     <?= count($products) > 0 ? e((string) count($products)) . ' deals loaded' : 'Fresh deals are on the way' ?>
                 </p>
             </div>
-            <?php if ($hasFilters): ?>
-                <button type="button" class="clear-filters" data-clear-filters>Clear filters</button>
-            <?php endif; ?>
+            <button type="button" class="clear-filters" data-clear-filters <?= $hasFilters ? '' : 'hidden' ?>>Clear filters</button>
         </div>
 
         <?php if ($configMissing): ?>

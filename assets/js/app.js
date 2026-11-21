@@ -16,6 +16,9 @@
     var sentinel = document.getElementById('infiniteSentinel');
     var toast = document.getElementById('toast');
     var header = document.getElementById('siteHeader');
+    var productsSection = document.querySelector('.products-section');
+    var dealsHeading = document.getElementById('dealsHeading');
+    var filterPanel = document.querySelector('.filter-panel');
     var pageSize = Number(cfg.pageSize) || 24;
 
     var state = {
@@ -391,6 +394,109 @@
         }
     }
 
+    function hasActiveFilters() {
+        return state.q.trim() !== ''
+            || state.category !== ''
+            || state.platform !== ''
+            || state.sort !== ''
+            || state.brand !== ''
+            || state.minPrice > 0
+            || state.maxPrice > 0
+            || state.minDiscount > 0
+            || state.minRating > 0;
+    }
+
+    function filterLabel() {
+        if (state.q.trim() !== '') {
+            return 'Results for “' + state.q.trim() + '”';
+        }
+        if (state.category !== '') {
+            return state.category + ' deals';
+        }
+        if (state.platform !== '') {
+            return state.platform + ' deals';
+        }
+        if (state.brand !== '') {
+            return state.brand + ' deals';
+        }
+        if (state.sort === 'discount_desc') {
+            return 'Biggest discounts';
+        }
+        if (state.sort === 'price_asc') {
+            return 'Lowest prices first';
+        }
+        if (state.sort === 'price_desc') {
+            return 'Highest prices first';
+        }
+        if (state.sort === 'rating_desc') {
+            return 'Top rated deals';
+        }
+        return 'Handpicked deals';
+    }
+
+    // Mirrors the server layout: with any filter active the hero, rails and
+    // browse links are hidden so the results are the only thing on screen.
+    function syncFilteredLayout() {
+        var active = hasActiveFilters();
+        document.body.classList.toggle('has-active-filter', active);
+        $all('[data-clear-filters]').forEach(function (button) {
+            button.hidden = !active;
+        });
+        if (filterPanel && active) {
+            filterPanel.open = true;
+        }
+        if (dealsHeading) {
+            dealsHeading.textContent = filterLabel();
+        }
+    }
+
+    function setResultsLoading(active, chip) {
+        $all('.platform-pill.is-loading, .category-chip.is-loading').forEach(function (item) {
+            item.classList.remove('is-loading');
+            item.removeAttribute('aria-busy');
+        });
+        if (productsSection) {
+            productsSection.classList.toggle('is-loading', active);
+        }
+        if (!active) {
+            return;
+        }
+        if (grid) {
+            // Clear the old list right away so the tapped filter never looks
+            // like a no-op while the request is still starting.
+            grid.innerHTML = skeletonMarkup(8);
+            hideEmpty();
+        }
+        if (chip) {
+            chip.classList.add('is-loading');
+            chip.setAttribute('aria-busy', 'true');
+        }
+        if (resultCount) {
+            resultCount.textContent = 'Loading ' + filterLabel().toLowerCase() + '…';
+        }
+    }
+
+    function scrollToResults() {
+        if (!productsSection) {
+            return;
+        }
+        var headerHeight = header ? header.getBoundingClientRect().height : 0;
+        var rect = productsSection.getBoundingClientRect();
+        // Already comfortably in view: do not yank the page around.
+        if (rect.top >= headerHeight - 8 && rect.top <= window.innerHeight * 0.6) {
+            return;
+        }
+        var reduceMotion = window.matchMedia
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var currentTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var target = Math.max(0, rect.top + currentTop - headerHeight - 14);
+        if (reduceMotion) {
+            window.scrollTo(0, target);
+        } else {
+            window.scrollTo({ top: target, behavior: 'smooth' });
+        }
+    }
+
     function showEmpty(title, text) {
         if (!emptyState) {
             return;
@@ -594,6 +700,7 @@
         }).finally(function () {
             if (requestId === state.requestId) {
                 state.loading = false;
+                setResultsLoading(false);
                 if (loadMoreBtn) {
                     loadMoreBtn.classList.remove('is-loading');
                 }
@@ -601,18 +708,33 @@
         });
     }
 
-    function resetAndLoad() {
+    function resetAndLoad(options) {
+        options = options || {};
+        var activeFilters = hasActiveFilters();
         applyFilterUI();
+        syncFilteredLayout();
         state.requestId += 1;
         if (state.controller) {
             state.controller.abort();
             state.controller = null;
         }
         state.loading = false;
+        state.offset = 0;
+        state.loaded = 0;
+        state.hasMore = true;
         window.clearTimeout(resetAndLoad.timer);
+
+        // Immediate feedback: skeletons, pill spinner and a progress bar appear
+        // before the network request starts, so a tap never feels ignored.
+        setResultsLoading(true, options.chip || null);
+        if (activeFilters && options.scroll !== false) {
+            window.requestAnimationFrame(scrollToResults);
+        }
+
+        // Coalesce rapid taps into one request instead of aborting each other.
         resetAndLoad.timer = window.setTimeout(function () {
             loadProducts(true);
-        }, 20);
+        }, activeFilters ? 120 : 20);
     }
 
     /* ---------- Index page: search, filters, pagination ---------- */
@@ -648,12 +770,17 @@
                     return;
                 }
                 event.preventDefault();
-                state.category = chip.dataset.category || '';
+                var nextCategory = chip.dataset.category || '';
+                if (nextCategory === state.category) {
+                    scrollToResults();
+                    return;
+                }
+                state.category = nextCategory;
                 state.searchTerms = [];
                 if (state.category) {
                     behaviourInterest(state.category);
                 }
-                resetAndLoad();
+                resetAndLoad({ chip: chip });
             });
         });
 
@@ -663,12 +790,18 @@
                     return;
                 }
                 event.preventDefault();
-                state.platform = chip.dataset.platform || '';
+                var nextPlatform = chip.dataset.platform || '';
+                if (nextPlatform === state.platform) {
+                    // Same tab tapped again: just bring the results into view.
+                    scrollToResults();
+                    return;
+                }
+                state.platform = nextPlatform;
                 state.searchTerms = [];
                 if (state.platform) {
                     behaviourInterest(state.platform);
                 }
-                resetAndLoad();
+                resetAndLoad({ chip: chip });
             });
         });
 
@@ -678,10 +811,16 @@
                 state.searchTerms = [];
                 state.category = '';
                 state.platform = '';
+                state.sort = '';
+                state.brand = '';
+                state.minPrice = 0;
+                state.maxPrice = 0;
+                state.minDiscount = 0;
+                state.minRating = 0;
                 if (searchInput) {
                     searchInput.value = '';
                 }
-                resetAndLoad();
+                resetAndLoad({ scroll: false });
             });
         });
 
@@ -701,6 +840,7 @@
         }
 
         applyFilterUI();
+        syncFilteredLayout();
         updateCount();
         updateLoadMore();
     }

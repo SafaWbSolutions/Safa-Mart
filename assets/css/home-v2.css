@@ -1486,3 +1486,15 @@ a.category-chip[href*="price-drops"]:hover { background: linear-gradient(135deg,
 @media (min-width: 901px) {
     .rail-arrow { display: inline-flex; }
 }
+
+/* ---------- Filtered view ----------
+   When any store/category filter is active the home-only sections are hidden,
+   matching the server-rendered layout so switching tabs changes the page
+   instantly instead of leaving the grid several screens below the hero. */
+body.has-active-filter .hero-carousel,
+body.has-active-filter .rail-spotlight,
+body.has-active-filter .rail-best,
+body.has-active-filter .for-you-section,
+body.has-active-filter .browse-links {
+    display: none !important;
+}
