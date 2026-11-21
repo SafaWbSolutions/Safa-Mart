@@ -244,8 +244,8 @@ if ($command === '/refreshmeta') {
     ignore_user_abort(true);
     telegram_send_message($chatId, '🔄 Refreshing brand, rating and details…');
 
-    $batch = 10;
-    $query = 'select=id,title,original_url&is_active=eq.true'
+    $batch = 8;
+    $query = 'select=*&is_active=eq.true'
         . '&order=last_checked_at.asc.nullsfirst&limit=' . $batch;
     $result = supabase_request('GET', supabase_table() . '?' . $query, null, [
         'service' => true,
@@ -257,8 +257,8 @@ if ($command === '/refreshmeta') {
     }
 
     $updated = 0;
+    $hidden = 0;
     $failed = 0;
-    $skipped = 0;
     $deadline = microtime(true) + 80;
     foreach ($result['data'] as $row) {
         if (!is_array($row) || microtime(true) >= $deadline) {
@@ -266,8 +266,20 @@ if ($command === '/refreshmeta') {
         }
         $id = (int) ($row['id'] ?? 0);
         $originalUrl = trim((string) ($row['original_url'] ?? ''));
-        if ($id < 1 || $originalUrl === '' || !is_product_page_url($originalUrl)) {
-            $skipped++;
+        if ($id < 1) {
+            continue;
+        }
+        if ($originalUrl === '' || !is_product_page_url($originalUrl)) {
+            // Listing/campaign rows that slipped in earlier: hide them so the
+            // refresh queue keeps moving.
+            $row['is_active'] = false;
+            $row['last_checked_at'] = gmdate('c');
+            $save = supabase_upsert($row, 'original_url');
+            if ($save['ok']) {
+                $hidden++;
+            } else {
+                $failed++;
+            }
             continue;
         }
         try {
@@ -280,14 +292,15 @@ if ($command === '/refreshmeta') {
             ]);
             continue;
         }
-        $patch = supabase_patch('id=eq.' . $id, [
-            'brand'           => truncate_text(clean_text((string) ($meta['brand'] ?? '')), 120),
-            'rating'          => (float) ($meta['rating'] ?? 0),
-            'rating_count'    => (int) ($meta['rating_count'] ?? 0),
-            'description'     => truncate_text((string) ($meta['description'] ?? ''), 1800),
-            'last_checked_at' => gmdate('c'),
-        ]);
-        if ($patch['ok']) {
+        // Upsert (not PATCH): some PostgREST/RLS setups answer PATCH with 204
+        // while updating nothing, which made the queue repeat forever.
+        $row['brand'] = truncate_text(clean_text((string) ($meta['brand'] ?? '')), 120);
+        $row['rating'] = (float) ($meta['rating'] ?? 0);
+        $row['rating_count'] = (int) ($meta['rating_count'] ?? 0);
+        $row['description'] = truncate_text((string) ($meta['description'] ?? ''), 1800);
+        $row['last_checked_at'] = gmdate('c');
+        $save = supabase_upsert($row, 'original_url');
+        if ($save['ok']) {
             $updated++;
         } else {
             $failed++;
@@ -296,18 +309,20 @@ if ($command === '/refreshmeta') {
 
     $summary = '✅ <b>Details refresh finished</b>' . "\n"
         . '• Updated: ' . $updated . "\n"
-        . '• Failed: ' . $failed . "\n"
-        . '• Skipped: ' . $skipped;
-    if ($updated >= $batch || microtime(true) >= $deadline) {
+        . '• Hidden (old junk): ' . $hidden . "\n"
+        . '• Failed: ' . $failed;
+    if ($updated + $hidden >= $batch || microtime(true) >= $deadline) {
         $summary .= "\n🔁 Run /refreshmeta again for the rest.";
+    } else {
+        $summary .= "\n🎉 All products refreshed.";
     }
     telegram_send_message($chatId, $summary);
     json_response([
         'ok'      => true,
         'command' => '/refreshmeta',
         'updated' => $updated,
+        'hidden'  => $hidden,
         'failed'  => $failed,
-        'skipped' => $skipped,
     ]);
 }
 if ($command === '/id') {
