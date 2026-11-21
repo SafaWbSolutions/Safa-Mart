@@ -123,7 +123,7 @@ function download_image_as_webp(string $imageUrl, string $slug, int $timeout = H
     }
 
     $response = http_request($imageUrl, [
-        'timeout'   => max(5, min(30, $timeout)),
+        'timeout'   => max(5, min(12, $timeout)),
         'max_bytes' => UPLOAD_MAX_BYTES,
         'accept'    => 'image/webp,image/jpeg,image/png,image/gif,image/*;q=0.8,*/*;q=0.5',
         'referer'   => $referer !== '' ? $referer : origin_of_url($imageUrl),

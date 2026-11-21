@@ -90,6 +90,9 @@ safa_define('EARNKARO_API_URL', trim((string) safa_config_value(
     'EARNKARO_API_URL',
     'https://api.earnkaro.com/v1/convert'
 )));
+// EarnKaro ki API kabhi-kabhi slow hoti hai; autopost ko block na kare isliye
+// timeout chhota rakha hai. Isse EARNKARO_TIMEOUT env/local config se badha-ghata sakte hain.
+safa_define('EARNKARO_TIMEOUT', max(3, min(15, (int) safa_config_value('EARNKARO_TIMEOUT', 8))));
 safa_define('EARNKARO_PLATFORMS', [
     'Flipkart',
     'Myntra',

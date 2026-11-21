@@ -863,7 +863,7 @@ function convert_to_affiliate(string $url, ?string $platform = null): array
         'method'    => 'POST',
         'json'      => ['url' => $url],
         'headers'   => $headers,
-        'timeout'   => 15,
+        'timeout'   => EARNKARO_TIMEOUT,
         'max_bytes' => 1048576,
     ]);
 
@@ -873,18 +873,12 @@ function convert_to_affiliate(string $url, ?string $platform = null): array
         $found = find_affiliate_url_in_response($decoded !== null ? $decoded : $response['body']);
     }
 
-    if ($found === null) {
-        $separator = strpos(EARNKARO_API_URL, '?') === false ? '?' : '&';
-        $getUrl = EARNKARO_API_URL . $separator . 'url=' . rawurlencode($url);
-        $getResponse = http_request($getUrl, [
-            'headers'   => $headers,
-            'timeout'   => 15,
-            'max_bytes' => 1048576,
+    if ($found === null && $response['status'] !== 0) {
+        app_log('warning', 'EarnKaro POST returned no affiliate URL', [
+            'platform' => $platform,
+            'status'   => $response['status'],
+            'error'    => $response['error'],
         ]);
-        if ($getResponse['ok'] && $getResponse['status'] >= 200 && $getResponse['status'] < 300) {
-            $decoded = json_decode($getResponse['body'], true);
-            $found = find_affiliate_url_in_response($decoded !== null ? $decoded : $getResponse['body']);
-        }
     }
 
     if ($found !== null && preg_match('#^https?://#i', $found)) {

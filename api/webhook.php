@@ -251,7 +251,7 @@ foreach ($urls as $url) {
             throw new RuntimeException('The product image could not be downloaded from the merchant page.');
         }
         $gallery = [$primaryImage['url']];
-        foreach (array_slice($images, 1, 2) as $extraImage) {
+        foreach (array_slice($images, 1, 1) as $extraImage) {
             try {
                 if (!is_safe_remote_url($extraImage)) {
                     continue;
