@@ -182,6 +182,7 @@ curl "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
 - Optional chat allowlist plus per-chat rate limiting.
 - Extracts up to two URLs from a message caption/text.
 - Rejects brand/category/campaign pages and accepts only single product pages for Myntra, Flipkart, Ajio and Amazon.
+- Expands EarnKaro collection/store links (for example a Shopsy seller store) into up to two individual products and copies the affiliate `affid`/`affExtParam` parameters onto each one.
 - Converts supported stores (Flipkart, Myntra, Amazon, etc.) through EarnKaro using `Authorization: Bearer <EARNKARO_TOKEN>`.
 - Scrapes `og:title`, `og:image`, OpenGraph price and JSON-LD `Product`/`Offer`, and rejects logos, sprites, placeholders and tiny 200x200 share images.
 - Downloads up to three images, resizes them, converts to WebP with GD, and stores them under `uploads/products/YYYY/MM/`.

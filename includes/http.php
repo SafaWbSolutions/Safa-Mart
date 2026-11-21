@@ -633,21 +633,24 @@ function find_merchant_url_in_query(string $url): string
  * Follow affiliate short links and JS/refresh redirects until a supported
  * merchant product URL is reached.
  */
-function resolve_merchant_url(string $url, int $maxHops = 4): string
+function resolve_merchant_url(string $url, int $maxHops = 4, bool $canonicalize = true): string
 {
     $current = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     if ($current === '' || !preg_match('#^https?://#i', $current)) {
         return $current;
     }
+    $finish = static function (string $resolved) use ($canonicalize): string {
+        return $canonicalize ? canonicalize_product_url($resolved) : $resolved;
+    };
 
     for ($hop = 0; $hop < $maxHops; $hop++) {
         if (is_merchant_url($current) && !needs_url_resolution($current)) {
-            return canonicalize_product_url($current);
+            return $finish($current);
         }
 
         $fromQuery = find_merchant_url_in_query($current);
         if ($fromQuery !== '') {
-            return canonicalize_product_url($fromQuery);
+            return $finish($fromQuery);
         }
 
         if (!is_safe_remote_url($current)) {
@@ -665,15 +668,15 @@ function resolve_merchant_url(string $url, int $maxHops = 4): string
             if ($location !== '') {
                 $next = resolve_url($current, $location);
                 if (is_merchant_url($next)) {
-                    return canonicalize_product_url($next);
+                    return $finish($next);
                 }
                 $found = find_merchant_url_in_html($location, $next);
                 if ($found !== '') {
-                    return canonicalize_product_url($found);
+                    return $finish($found);
                 }
                 $fromQuery = find_merchant_url_in_query($next);
                 if ($fromQuery !== '') {
-                    return canonicalize_product_url($fromQuery);
+                    return $finish($fromQuery);
                 }
             }
             return $current;
@@ -681,19 +684,19 @@ function resolve_merchant_url(string $url, int $maxHops = 4): string
 
         $effective = trim((string) ($response['effective_url'] ?? ''));
         if ($effective !== '' && $effective !== $current && is_merchant_url($effective)) {
-            return canonicalize_product_url($effective);
+            return $finish($effective);
         }
 
         if ($effective !== '' && $effective !== $current) {
             $fromQuery = find_merchant_url_in_query($effective);
             if ($fromQuery !== '') {
-                return canonicalize_product_url($fromQuery);
+                return $finish($fromQuery);
             }
         }
 
         $found = find_merchant_url_in_html((string) $response['body'], $effective !== '' ? $effective : $current);
         if ($found !== '') {
-            return canonicalize_product_url($found);
+            return $finish($found);
         }
 
         if ($effective === '' || $effective === $current) {

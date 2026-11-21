@@ -482,7 +482,7 @@ function is_affiliate_url(string $url): bool
     $affiliateHosts = [
         'earnkaro.com', 'ekaro.in', 'ekaro.co', 'earnkaro.in',
         'bitli.in', 'linkredirect.in', 'myntr.it', 'ajiio.in',
-        'fkrt.it', 'fkrt.co', 'shopsy.in', 'amzn.to',
+        'fkrt.it', 'fkrt.co', 'amzn.to',
     ];
     foreach ($affiliateHosts as $domain) {
         if ($host === $domain || str_ends_with($host, '.' . $domain)) {

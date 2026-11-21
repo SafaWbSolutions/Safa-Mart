@@ -378,6 +378,170 @@ function scrape_ajio_search_fallback(string $url): array
 }
 
 /**
+ * Pull affiliate query parameters (affid, tag, ...) out of a link or the
+ * affiliate landing page it points to.
+ *
+ * EarnKaro short links (bitli.in, linkredirect.in) keep the real tracking
+ * parameters only inside the landing page, not on the short URL itself.
+ *
+ * @return array<string,string>
+ */
+function affiliate_params_from_url(string $url): array
+{
+    $keys = ['affid', 'affExtParam1', 'affExtParam2', 'affExtParam3', 'cmpid', 'tag', 'linkCode', 'icid'];
+
+    $collect = static function (string $candidate) use ($keys): array {
+        $out = [];
+        parse_str((string) parse_url($candidate, PHP_URL_QUERY), $query);
+        foreach ($keys as $key) {
+            if (isset($query[$key]) && is_string($query[$key]) && $query[$key] !== '') {
+                $out[$key] = $query[$key];
+            }
+        }
+        return $out;
+    };
+
+    $direct = $collect($url);
+    if ($direct) {
+        return $direct;
+    }
+
+    $response = http_request($url, [
+        'timeout'   => HTTP_TIMEOUT,
+        'max_bytes' => 2097152,
+        'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'referer'   => origin_of_url($url),
+    ]);
+    if (!$response['ok']) {
+        return [];
+    }
+
+    $html = str_replace(['\\/', '\\u002F', '\\u002f', '&amp;'], ['/', '/', '/', '&'], (string) $response['body']);
+    if (preg_match_all('~https?://[^\s"\'<>\\\\]+~i', $html, $matches)) {
+        foreach ($matches[0] as $candidate) {
+            $params = $collect($candidate);
+            if (isset($params['affid']) || isset($params['tag']) || isset($params['linkCode'])) {
+                return $params;
+            }
+        }
+    }
+    return [];
+}
+
+/**
+ * Expand a merchant collection/store page into individual product URLs.
+ *
+ * EarnKaro often shares collection links (for example a Shopsy seller store)
+ * that contain many products. The storefront can only show single products,
+ * so a few product links are pulled out of that page. EarnKaro / Flipkart
+ * affiliate query parameters are copied onto every extracted product link so
+ * the click stays tracked.
+ *
+ * @return list<string>
+ */
+function expand_collection_url(string $url, int $limit = 2, array $affiliateParams = []): array
+{
+    $limit = max(1, min(5, $limit));
+    $platform = detect_platform($url);
+    if ($platform === 'Other') {
+        return [];
+    }
+
+    $response = http_request($url, [
+        'timeout'   => HTTP_TIMEOUT,
+        'max_bytes' => 6291456,
+        'accept'    => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'referer'   => origin_of_url($url),
+    ]);
+    if (!$response['ok'] || (int) $response['status'] !== 200) {
+        return [];
+    }
+
+    $html = str_replace(['\\/', '\\u002F', '\\u002f', '&amp;'], ['/', '/', '/', '&'], (string) $response['body']);
+    if ($html === '') {
+        return [];
+    }
+    $base = (string) ($response['effective_url'] ?? $url);
+
+    $found = [];
+    $add = static function (string $candidate) use (&$found, $base, $platform, $limit): void {
+        if (count($found) >= $limit) {
+            return;
+        }
+        $candidate = html_entity_decode(trim($candidate), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($candidate === '' || str_starts_with($candidate, 'data:')) {
+            return;
+        }
+        $absolute = resolve_url($base, $candidate);
+        if (!preg_match('#^https?://#i', $absolute) || !is_safe_remote_url($absolute)) {
+            return;
+        }
+        if (detect_platform($absolute) !== $platform || !is_product_page_url($absolute)) {
+            return;
+        }
+        $clean = canonicalize_product_url($absolute);
+        if ($clean !== '' && !in_array($clean, $found, true)) {
+            $found[] = $clean;
+        }
+    };
+
+    if (preg_match_all('~https?://[^\s"\'<>\\\\]+~i', $html, $matches)) {
+        foreach ($matches[0] as $candidate) {
+            $add($candidate);
+            if (count($found) >= $limit) {
+                break;
+            }
+        }
+    }
+    if (count($found) < $limit && preg_match_all('~href\s*=\s*["\']([^"\']+)["\']~i', $html, $hrefs)) {
+        foreach ($hrefs[1] as $href) {
+            $add($href);
+            if (count($found) >= $limit) {
+                break;
+            }
+        }
+    }
+    if (!$found) {
+        return [];
+    }
+
+    // Copy EarnKaro / Flipkart affiliate parameters onto each product link.
+    $carry = [];
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+    foreach (['affid', 'affExtParam1', 'affExtParam2', 'affExtParam3', 'cmpid', 'tag', 'linkCode', 'icid'] as $key) {
+        if (isset($query[$key]) && is_string($query[$key]) && $query[$key] !== '') {
+            $carry[$key] = $query[$key];
+        }
+    }
+    foreach ($affiliateParams as $key => $value) {
+        if (!isset($carry[$key]) && is_string($value) && $value !== '') {
+            $carry[$key] = $value;
+        }
+    }
+    if (!$carry) {
+        return $found;
+    }
+
+    $result = [];
+    foreach ($found as $productUrl) {
+        $parts = parse_url($productUrl);
+        if (!is_array($parts) || empty($parts['host'])) {
+            continue;
+        }
+        $existing = [];
+        if (!empty($parts['query'])) {
+            parse_str((string) $parts['query'], $existing);
+        }
+        $merged = array_merge($existing, $carry);
+        $result[] = $parts['scheme'] . '://' . $parts['host']
+            . (isset($parts['port']) ? ':' . (int) $parts['port'] : '')
+            . (string) ($parts['path'] ?? '/')
+            . '?' . http_build_query($merged);
+    }
+    return $result;
+}
+
+/**
  * Scrape OpenGraph and JSON-LD product data.
  *
  * @return array<string,mixed>

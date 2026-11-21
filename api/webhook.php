@@ -289,6 +289,27 @@ if (!$urls) {
     json_response(['ok' => true, 'ignored' => 'no urls']);
 }
 
+// EarnKaro often shares a collection/store link (many products in one page).
+// Single product pages are the only thing the storefront can show, so such a
+// link is expanded into a few individual products before listing starts.
+$expandedUrls = [];
+foreach ($urls as $url) {
+    $candidate = resolve_merchant_url($url, 4, false);
+    if ($candidate !== '' && !is_product_page_url($candidate) && detect_platform($candidate) !== 'Other') {
+        $expanded = expand_collection_url($candidate, 2, affiliate_params_from_url($url));
+        if ($expanded) {
+            foreach ($expanded as $expandedUrl) {
+                if (!in_array($expandedUrl, $expandedUrls, true)) {
+                    $expandedUrls[] = $expandedUrl;
+                }
+            }
+            continue;
+        }
+    }
+    $expandedUrls[] = $url;
+}
+$urls = array_slice($expandedUrls, 0, 4);
+
 @set_time_limit(110);
 ignore_user_abort(true);
 
