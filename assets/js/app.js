@@ -68,7 +68,8 @@
             .replace(/\s+Price in India\b.*$/i, '')
             .replace(/\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$/i, '')
             .replace(/\s+(?:online\s+)?at\s+(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)(?:\.(?:com|in))?\s*$/i, '')
-            .replace(/^Buy\s+(?=[A-Z0-9])/, '')
+            .replace(/\s*[-–—]\s*Apparel for (?:Men|Women|Kids|Boys|Girls)[.!]?\s*$/i, '')
+            .replace(/^Buy\s+(?=[A-Z0-9])/i, '')
             .replace(/^[\s\-–—|,]+|[\s\-–—|,]+$/g, '')
             .trim();
         return cleaned || original;
@@ -79,10 +80,9 @@
         if (!isFinite(number) || number < 0) {
             number = 0;
         }
-        var decimals = Math.floor(number) === number ? 0 : 2;
-        return '₹' + number.toLocaleString('en-IN', {
+        return '₹' + Math.round(number).toLocaleString('en-IN', {
             minimumFractionDigits: 0,
-            maximumFractionDigits: decimals
+            maximumFractionDigits: 0
         });
     }
 

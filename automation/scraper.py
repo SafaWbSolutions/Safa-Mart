@@ -212,7 +212,8 @@ def clean_title(value: Any) -> str:
         cleaned,
         flags=re.I,
     )
-    cleaned = re.sub(r"^Buy\s+(?=[A-Z0-9])", "", cleaned)
+    cleaned = re.sub(r"\s*[-–—]\s*Apparel for (?:Men|Women|Kids|Boys|Girls)[.!]?\s*$", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"^Buy\s+(?=[A-Z0-9])", "", cleaned, flags=re.I)
     cleaned = cleaned.strip(" \t\n\r-–—|,")
     return cleaned or original
 

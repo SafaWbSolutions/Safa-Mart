@@ -34,7 +34,7 @@ if ($description === '') {
 }
 $gallery = product_gallery($product);
 $primaryImage = $gallery[0] ?? '';
-$savings = max(0, $mrp - $price);
+$savings = max(0, (float) round($mrp - $price));
 $productUrl = site_url('product.php?slug=' . rawurlencode((string) ($product['slug'] ?? '')));
 $buyUrl = site_url('go.php?id=' . $id);
 $lastChecked = human_date($product['last_synced_at'] ?? ($product['updated_at'] ?? null));
@@ -50,19 +50,151 @@ if (isset($product['specs']) && is_array($product['specs'])) {
     }));
 }
 
+$specPriorities = [
+    'fabric', 'material', 'fit', 'pattern', 'print', 'colour', 'color', 'occasion',
+    'sleeve', 'neck', 'display', 'screen', 'battery', 'ram', 'storage', 'processor',
+    'camera', 'capacity', 'weight', 'dimensions', 'type',
+];
+$rankedSpecs = [];
+foreach ($specs as $spec) {
+    $specKey = strtolower((string) ($spec['key'] ?? ''));
+    if ($specKey === '' || str_contains($specKey, 'body or garment')
+        || preg_match('/^(material\s*&\s*care|size\s*&\s*fit|product details)$/i', trim($specKey))) {
+        continue;
+    }
+    $rank = 100;
+    foreach ($specPriorities as $index => $needle) {
+        $matches = $needle === 'ram'
+            ? (bool) preg_match('/\bram\b/', $specKey)
+            : str_contains($specKey, $needle);
+        if ($matches) {
+            $rank = $index;
+            break;
+        }
+    }
+    if ($rank < 100) {
+        $rankedSpecs[] = [$rank, $spec];
+    }
+}
+usort($rankedSpecs, static function (array $a, array $b): int {
+    return $a[0] <=> $b[0];
+});
+$keySpecs = [];
+$seenSpecValues = [];
+foreach ($rankedSpecs as $entry) {
+    $value = strtolower(trim((string) ($entry[1]['value'] ?? '')));
+    if ($value === '' || isset($seenSpecValues[$value])) {
+        continue;
+    }
+    $seenSpecValues[$value] = true;
+    $keySpecs[] = $entry[1];
+    if (count($keySpecs) >= 4) {
+        break;
+    }
+}
+
+if ($discount >= 60) {
+    $dealLabel = '🔥 Blockbuster deal';
+} elseif ($discount >= 40) {
+    $dealLabel = '🔥 Great deal';
+} elseif ($discount >= 20) {
+    $dealLabel = '⚡ Good deal';
+} elseif ($rating >= 4) {
+    $dealLabel = '⭐ Top rated pick';
+} else {
+    $dealLabel = '✓ Verified deal';
+}
+
+$stars = '';
+if ($rating > 0) {
+    $filled = max(1, min(5, (int) round($rating)));
+    $stars = str_repeat('★', $filled) . str_repeat('☆', 5 - $filled);
+}
+
+// Marketplace-wide boilerplate is not about the product, so do not show it as highlights.
+$descriptionIsUseful = $description !== ''
+    && !preg_match('/only on digihaat|order everything from one website/i', $description);
+$aboutDescription = $descriptionIsUseful ? $description : '';
+[$descriptionHighlights, $descriptionRest] = split_description_highlights($aboutDescription, 3);
+$seenHighlights = [];
+$titleKey = strtolower($title);
+$descriptionHighlights = array_values(array_filter(array_map(static function (string $line) use (&$seenHighlights, $titleKey): string {
+    $line = clean_product_title($line);
+    $line = preg_replace('/\s*[-–—]\s*Apparel for (?:Men|Women|Kids|Boys|Girls)\b/iu', '', $line) ?? $line;
+    $line = preg_replace('/\s+from\s+[^,]{1,60}?\s+at\s+Rs\.?\s*[\d,.]+.*$/iu', '', $line) ?? $line;
+    $line = preg_replace('/\s+at\s+Rs\.?\s*[\d,.]+.*$/iu', '', $line) ?? $line;
+    $line = trim((string) preg_replace('/\s{2,}/u', ' ', $line) ?? $line, " \t\n\r-–—|,");
+    $line = $line !== '' ? ucfirst($line) : '';
+    $key = strtolower(rtrim($line, " ."));
+    // Skip a "description" that is just the product name again.
+    if ($line === '' || $key === '' || isset($seenHighlights[$key]) || ($titleKey !== '' && str_contains($titleKey, $key))) {
+        return '';
+    }
+    $seenHighlights[$key] = true;
+    return $line;
+}, $descriptionHighlights)));
+
+// Fill the highlight list with extra specs when the description is short. The
+// strongest specs already appear as tiles below, so use different ones here.
+$tileKeys = array_map(static function (array $spec): string {
+    return strtolower(trim((string) ($spec['key'] ?? '')));
+}, $keySpecs);
+$secondaryPriorities = [
+    'occasion', 'sleeve', 'neck', 'wash', 'length', 'transparency', 'colour', 'color',
+    'hemline', 'placket', 'pocket', 'cuff', 'collar', 'weight', 'dimensions', 'warranty',
+];
+$spareSpecs = [];
+foreach ($specs as $spec) {
+    $specKey = strtolower(trim((string) ($spec['key'] ?? '')));
+    if ($specKey === '' || in_array($specKey, $tileKeys, true)
+        || preg_match('/^(material\s*&\s*care|size\s*&\s*fit|product details|body or garment size)$/i', $specKey)) {
+        continue;
+    }
+    $rank = 50;
+    foreach ($secondaryPriorities as $index => $needle) {
+        if (str_contains($specKey, $needle)) {
+            $rank = $index;
+            break;
+        }
+    }
+    $spareSpecs[] = [$rank, $spec];
+}
+usort($spareSpecs, static function (array $a, array $b): int {
+    return $a[0] <=> $b[0];
+});
+foreach ($spareSpecs as $entry) {
+    if (count($descriptionHighlights) >= 3) {
+        break;
+    }
+    $spec = $entry[1];
+    $line = trim((string) ($spec['key'] ?? '')) . ': ' . truncate_text((string) ($spec['value'] ?? ''), 70);
+    $key = strtolower(rtrim($line, " ."));
+    if (isset($seenHighlights[$key])) {
+        continue;
+    }
+    $seenHighlights[$key] = true;
+    $descriptionHighlights[] = $line;
+}
+$lastCheckedLabel = $lastChecked !== '' ? $lastChecked : 'recently';
+
 $related = fetch_related_products($category, $id, 8);
 $shareTitle = $title . ' at ' . ($price > 0 ? inr($price) : 'a great price') . ' on ' . APP_NAME;
 $whatsappUrl = 'https://wa.me/?text=' . rawurlencode($shareTitle . ' ' . $productUrl);
 $telegramUrl = 'https://t.me/share/url?url=' . rawurlencode($productUrl) . '&text=' . rawurlencode($shareTitle);
 
 $pageTitle = truncate_text($title, 62) . ' – ' . ($price > 0 ? inr($price) : 'Best price') . ' | ' . APP_NAME;
-$metaDescription = truncate_text($description, 158);
+$metaDescription = truncate_text(
+    $aboutDescription !== ''
+        ? $aboutDescription
+        : $title . ' available at ' . ($price > 0 ? inr($price) : 'the best price') . ' on ' . $platform . '.',
+    158
+);
 
 $schema = [
     '@context'    => 'https://schema.org',
     '@type'       => 'Product',
     'name'        => $title,
-    'description' => truncate_text($description, 900),
+    'description' => truncate_text($aboutDescription !== '' ? $aboutDescription : $metaDescription, 900),
     'sku'         => (string) $id,
     'url'         => $productUrl,
     'brand'       => ['@type' => 'Brand', 'name' => $brand !== '' ? $brand : $platform],
@@ -144,6 +276,7 @@ $breadcrumbSchema = [
         };
     </script>
     <link rel="stylesheet" href="<?= e(asset_url('assets/css/style.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset_url('assets/css/product-v2.css')) ?>">
     <script>
         window.SAFA_CONFIG = <?= json_encode([
             'supabaseUrl' => SUPABASE_URL,
@@ -159,11 +292,15 @@ $breadcrumbSchema = [
     <script type="application/ld+json"><?= json_encode($breadcrumbSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </head>
 <body class="product-page">
-<div class="top-strip">
+<div class="top-strip product-top-strip">
     <div class="site-container top-strip-inner">
-        <span>Verified affiliate deal</span>
+        <?php if ($discount > 0): ?>
+            <span class="top-strip-highlight">🔥 <?= $discount ?>% OFF today</span>
+            <span class="top-strip-sep" aria-hidden="true">•</span>
+        <?php endif; ?>
+        <span>Deal verified <?= e($lastCheckedLabel) ?></span>
         <span class="top-strip-sep" aria-hidden="true">•</span>
-        <span>Price checked <?= e($lastChecked !== '' ? $lastChecked : 'recently') ?></span>
+        <span>Same price as <?= e($platform) ?> — no extra fees</span>
     </div>
 </div>
 
@@ -216,6 +353,15 @@ $breadcrumbSchema = [
                 <?php if ($discount > 0): ?>
                     <span class="gallery-discount"><?= $discount ?>% OFF</span>
                 <?php endif; ?>
+                <?php if ($discount >= 50): ?>
+                    <span class="gallery-ribbon">🔥 Deal of the day</span>
+                <?php endif; ?>
+                <?php if ($primaryImage !== ''): ?>
+                    <span class="gallery-zoom-hint" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4M11 8v6M8 11h6"/></svg>
+                        Hover to zoom
+                    </span>
+                <?php endif; ?>
             </div>
 
             <?php if (count($gallery) > 1): ?>
@@ -235,8 +381,9 @@ $breadcrumbSchema = [
             <?php endif; ?>
 
             <div class="gallery-trust">
-                <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> Original product image</span>
-                <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v18M3 12h18"/></svg> Locally hosted, fast loading</span>
+                <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> Exact <?= e($platform) ?> images</span>
+                <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg> Price verified <?= e($lastCheckedLabel) ?></span>
+                <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> Secure merchant checkout</span>
             </div>
         </section>
 
@@ -254,56 +401,106 @@ $breadcrumbSchema = [
             <?php if ($rating > 0): ?>
                 <div class="product-rating-row">
                     <span class="rating-badge"><span aria-hidden="true">★</span> <?= e(number_format($rating, 1)) ?></span>
+                    <span class="rating-stars" aria-hidden="true"><?= e($stars) ?></span>
                     <?php if ($ratingCount > 0): ?>
-                        <span class="rating-text"><?= e(number_format($ratingCount)) ?> ratings</span>
+                        <span class="rating-text"><?= e(compact_count($ratingCount)) ?> ratings</span>
                     <?php endif; ?>
                     <span class="rating-source">on <?= e($platform) ?></span>
                 </div>
             <?php endif; ?>
 
-            <div class="detail-price-block">
-                <span class="detail-price"><?= $price > 0 ? e(inr($price)) : 'Price on request' ?></span>
-                <?php if ($mrp > $price && $price > 0): ?>
-                    <span class="detail-mrp"><?= e(inr($mrp)) ?></span>
-                    <span class="detail-discount"><?= $discount ?>% OFF</span>
-                <?php endif; ?>
-                <span class="detail-tax">Inclusive of all taxes</span>
-            </div>
-
-            <?php if ($savings > 0): ?>
-                <div class="savings-banner">
-                    <span class="savings-icon" aria-hidden="true">₹</span>
-                    <div><strong>You save <?= e(inr($savings)) ?></strong><span>Compared with the listed MRP</span></div>
+            <?php if ($price > 0): ?>
+                <div class="price-hero">
+                    <div class="price-hero-head">
+                        <span class="deal-score"><?= e($dealLabel) ?></span>
+                        <span class="price-verified-chip"><span class="live-dot"></span> Live deal</span>
+                    </div>
+                    <div class="price-hero-main">
+                        <strong class="hero-price"><?= e(inr($price)) ?></strong>
+                        <?php if ($mrp > $price): ?>
+                            <span class="hero-mrp"><?= e(inr($mrp)) ?></span>
+                            <span class="hero-off"><?= $discount ?>% OFF</span>
+                        <?php endif; ?>
+                    </div>
+                    <p class="hero-tax">Inclusive of all taxes · same price as <?= e($platform) ?></p>
+                    <?php if ($savings > 0): ?>
+                        <div class="hero-save">
+                            <div class="hero-save-text">
+                                <strong>You save <?= e(inr($savings)) ?></strong>
+                                <span>That's <?= $discount ?>% less than the listed MRP</span>
+                            </div>
+                            <div class="save-bar" aria-hidden="true"><span style="width: <?= max(4, min(100, $discount)) ?>%"></span></div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <div class="price-hero">
+                    <div class="price-hero-head">
+                        <span class="deal-score"><?= e($dealLabel) ?></span>
+                        <span class="price-verified-chip"><span class="live-dot"></span> Live deal</span>
+                    </div>
+                    <div class="price-hero-main">
+                        <strong class="hero-price">Check price on <?= e($platform) ?></strong>
+                    </div>
+                    <p class="hero-tax">Final price is shown on the merchant page.</p>
                 </div>
             <?php endif; ?>
 
-            <div class="deal-meta-row">
-                <span class="stock-pill"><span class="live-dot"></span> Available on <?= e($platform) ?></span>
-                <?php if ($lastChecked !== ''): ?>
-                    <span class="checked-text">Checked <?= e($lastChecked) ?></span>
-                <?php endif; ?>
+            <div class="deal-reasons">
+                <span class="deal-reasons-title">Why this deal is worth it</span>
+                <ul>
+                    <?php if ($savings > 0): ?>
+                        <li><span class="reason-icon">₹</span> <?= $discount ?>% cheaper than MRP — you keep <?= e(inr($savings)) ?></li>
+                    <?php endif; ?>
+                    <?php if ($rating > 0 && $ratingCount > 0): ?>
+                        <li><span class="reason-icon">★</span> <?= e(number_format($rating, 1)) ?>★ from <?= e(compact_count($ratingCount)) ?> shoppers on <?= e($platform) ?></li>
+                    <?php endif; ?>
+                    <li><span class="reason-icon">🔒</span> Checkout happens on <?= e($platform) ?> — we add no hidden charges</li>
+                </ul>
             </div>
 
             <div class="cta-stack">
-                <a class="primary-buy" href="<?= e($buyUrl) ?>" target="_blank" rel="nofollow sponsored noopener">
-                    <span>Buy Now on <?= e($platform) ?></span>
-                    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+                <a class="primary-buy primary-buy-xl" href="<?= e($buyUrl) ?>" target="_blank" rel="nofollow sponsored noopener">
+                    <span class="cta-bag" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2"><path d="M5.5 8.5h13l-1.1 11H6.6l-1.1-11Z"/><path d="M9 8.5a3 3 0 0 1 6 0"/></svg>
+                    </span>
+                    <span class="cta-label">
+                        <strong>Grab this deal</strong>
+                        <small><?= $price > 0 ? e(inr($price)) . ' on ' . e($platform) : 'on ' . e($platform) ?></small>
+                    </span>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
                 </a>
-                <p class="cta-note">You will be redirected to <?= e($platform) ?> to complete your purchase. The price stays the same.</p>
+                <p class="cta-note"><span class="live-dot"></span> Prices on <?= e($platform) ?> change fast — this deal may not last.</p>
+                <div class="trust-row" aria-label="Buying benefits">
+                    <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> Secure checkout</span>
+                    <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> Genuine product</span>
+                    <span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></svg> Merchant returns</span>
+                </div>
+
+                <a class="offer-banner" href="<?= e($buyUrl) ?>" target="_blank" rel="nofollow sponsored noopener">
+                    <span class="offer-banner-icon" aria-hidden="true">🏷️</span>
+                    <span class="offer-banner-text">
+                        <strong>Extra offers available on <?= e($platform) ?></strong>
+                        <small>Bank offers, coupons &amp; delivery benefits — check at checkout</small>
+                    </span>
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+                </a>
             </div>
 
             <div class="price-comparison-card">
                 <div class="price-card-head">
-                    <h2>Price snapshot</h2>
-                    <span class="price-verified"><span class="live-dot"></span> Live deal</span>
+                    <h2>Price breakdown</h2>
+                    <span class="price-verified"><span class="live-dot"></span> Verified <?= e($lastCheckedLabel) ?></span>
                 </div>
-                <div class="price-line"><span>Listed MRP</span><span class="<?= $mrp > $price ? 'strike' : '' ?>"><?= $mrp > 0 ? e(inr($mrp)) : '—' ?></span></div>
-                <div class="price-line"><span><?= e(APP_NAME) ?> deal price</span><strong><?= $price > 0 ? e(inr($price)) : 'Check price' ?></strong></div>
+                <div class="price-line"><span>MRP on <?= e($platform) ?></span><span class="<?= $mrp > $price ? 'strike' : '' ?>"><?= $mrp > 0 ? e(inr($mrp)) : '—' ?></span></div>
+                <div class="price-line price-line-main"><span>You pay on <?= e($platform) ?></span><strong><?= $price > 0 ? e(inr($price)) : 'Check price' ?></strong></div>
                 <?php if ($savings > 0): ?>
-                    <div class="price-line price-line-save"><span>Your saving</span><strong><?= e(inr($savings)) ?> (<?= $discount ?>%)</strong></div>
+                    <div class="price-line price-line-save"><span>Total saving</span><strong><?= e(inr($savings)) ?> · <?= $discount ?>%</strong></div>
+                    <div class="savings-track" aria-hidden="true"><span style="width: <?= max(4, min(100, $discount)) ?>%"></span></div>
                 <?php endif; ?>
                 <div class="price-line"><span>Sold via</span><strong><?= e($platform) ?></strong></div>
-                <p class="price-note">Final price, delivery fee and offers are shown on the merchant page and may change at any time.</p>
+                <div class="price-line"><span>Safa Mart fee</span><strong class="fee-zero">₹0 extra</strong></div>
+                <p class="price-note">Delivery fee, bank offers and final price are shown on the merchant page and may change at any time.</p>
             </div>
 
             <div class="share-card">
@@ -329,9 +526,26 @@ $breadcrumbSchema = [
         </section>
     </div>
 
-    <section class="product-description" aria-labelledby="aboutProduct">
-        <h2 id="aboutProduct">About this product</h2>
-        <p><?= e($description) ?></p>
+    <section class="product-description product-about" aria-labelledby="aboutProduct">
+        <div class="about-head">
+            <h2 id="aboutProduct">About this product</h2>
+            <span class="about-badge">✓ Details from <?= e($platform) ?></span>
+        </div>
+        <?php if ($descriptionHighlights): ?>
+            <ul class="about-highlights">
+                <?php foreach ($descriptionHighlights as $highlight): ?>
+                    <li><span class="about-check" aria-hidden="true">✓</span> <?= e($highlight) ?></li>
+                <?php endforeach; ?>
+            </ul>
+            <?php if ($descriptionRest !== ''): ?>
+                <details class="about-more">
+                    <summary>Read full description</summary>
+                    <p><?= e($descriptionRest) ?></p>
+                </details>
+            <?php endif; ?>
+        <?php elseif ($aboutDescription !== ''): ?>
+            <p><?= e($aboutDescription) ?></p>
+        <?php endif; ?>
         <div class="detail-facts">
             <?php if ($brand !== ''): ?>
                 <div><span>Brand</span><strong><?= e($brand) ?></strong></div>
@@ -347,7 +561,20 @@ $breadcrumbSchema = [
 
     <?php if ($specs): ?>
         <section class="product-specs" aria-labelledby="specsHeading">
-            <h2 id="specsHeading">Specifications</h2>
+            <div class="specs-head">
+                <h2 id="specsHeading">Specifications</h2>
+                <span class="specs-count"><?= count($specs) ?> details</span>
+            </div>
+            <?php if ($keySpecs): ?>
+                <div class="spec-tiles">
+                    <?php foreach ($keySpecs as $spec): ?>
+                        <div class="spec-tile">
+                            <span><?= e((string) ($spec['key'] ?? '')) ?></span>
+                            <strong><?= e(truncate_text((string) ($spec['value'] ?? ''), 46)) ?></strong>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
             <div class="specs-grid">
                 <?php foreach ($specs as $spec): ?>
                     <div class="spec-row">
@@ -363,8 +590,8 @@ $breadcrumbSchema = [
         <section class="related-section" aria-labelledby="relatedHeading">
             <div class="section-heading">
                 <div>
-                    <h2 id="relatedHeading">You may also like</h2>
-                    <p>More deals from <?= e($category !== '' ? $category : 'the storefront') ?></p>
+                    <h2 id="relatedHeading">More deals you'll love</h2>
+                    <p>Handpicked <?= e($category !== '' ? strtolower($category) : 'deals') ?> at similar prices</p>
                 </div>
                 <a class="clear-filters" href="<?= e(site_url('index.php?category=' . rawurlencode($category))) ?>">View all</a>
             </div>
@@ -379,11 +606,18 @@ $breadcrumbSchema = [
 
 <div class="mobile-buybar">
     <div class="mobile-price">
-        <span>Best price</span>
+        <span>Deal price</span>
         <strong><?= $price > 0 ? e(inr($price)) : 'Check price' ?></strong>
-        <?php if ($discount > 0): ?><em><?= $discount ?>% off</em><?php endif; ?>
+        <?php if ($mrp > $price && $discount > 0): ?>
+            <em><s><?= e(inr($mrp)) ?></s> <?= $discount ?>% off</em>
+        <?php elseif ($discount > 0): ?>
+            <em><?= $discount ?>% off</em>
+        <?php endif; ?>
     </div>
-    <a class="mobile-buy-btn" href="<?= e($buyUrl) ?>" target="_blank" rel="nofollow sponsored noopener">Buy Now</a>
+    <a class="mobile-buy-btn" href="<?= e($buyUrl) ?>" target="_blank" rel="nofollow sponsored noopener">
+        Buy Now
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+    </a>
 </div>
 
 <footer class="site-footer product-footer">

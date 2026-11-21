@@ -176,7 +176,8 @@ function clean_product_title(string $title): string
             '/\s+Price in India\b.*$/iu',
             '/\s*\|\s*(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)\b.*$/iu',
             '/\s+(?:online\s+)?at\s+(?:Flipkart|Myntra|Amazon(?:\.in)?|Ajio|Shopsy|DigiHaat|Tata\s*CLiQ|Nykaa|Meesho)(?:\.(?:com|in))?\s*$/iu',
-            '/^Buy\s+(?=[A-Z0-9])/u',
+            '/\s*[-–—]\s*Apparel for (?:Men|Women|Kids|Boys|Girls)[.!]?\s*$/iu',
+            '/^Buy\s+(?=[A-Z0-9])/iu',
         ],
         '',
         $original
@@ -184,6 +185,54 @@ function clean_product_title(string $title): string
     $cleaned = is_string($cleaned) ? trim($cleaned, " \t\n\r\0\x0B-–—|,") : $original;
 
     return $cleaned !== '' ? $cleaned : $original;
+}
+
+/**
+ * Split a merchant description into short, scannable highlight lines.
+ *
+ * @return array{0: list<string>, 1: string} First entry: bullet lines, second: the rest.
+ */
+function split_description_highlights(string $text, int $max = 3): array
+{
+    $text = clean_text($text);
+    if ($text === '') {
+        return [[], ''];
+    }
+
+    $sentences = preg_split('/(?<=[.!?])\s+/u', $text) ?: [];
+    $sentences = array_values(array_filter(array_map('trim', $sentences), static function ($sentence): bool {
+        return $sentence !== '';
+    }));
+
+    // Re-join abbreviation fragments such as "U.S." or "Assn." with the next sentence.
+    $joined = [];
+    $pending = '';
+    foreach ($sentences as $sentence) {
+        $pending = $pending === '' ? $sentence : $pending . ' ' . $sentence;
+        $length = function_exists('mb_strlen') ? mb_strlen($pending, 'UTF-8') : strlen($pending);
+        if ($length < 30) {
+            continue;
+        }
+        $joined[] = $pending;
+        $pending = '';
+    }
+    if ($pending !== '') {
+        if ($joined) {
+            $joined[count($joined) - 1] .= ' ' . $pending;
+        } else {
+            $joined[] = $pending;
+        }
+    }
+    $sentences = $joined;
+
+    if (count($sentences) < 2) {
+        return [[$text], ''];
+    }
+
+    $highlights = array_slice($sentences, 0, max(1, $max));
+    $rest = implode(' ', array_slice($sentences, max(1, $max)));
+
+    return [$highlights, $rest];
 }
 
 function truncate_text(string $text, int $limit): string
@@ -248,6 +297,9 @@ function inr_plain($amount, bool $forceDecimals = false): string
     $amount = (float) $amount;
     if (!is_finite($amount)) {
         $amount = 0.0;
+    }
+    if (!$forceDecimals) {
+        $amount = round($amount);
     }
     $decimals = ($forceDecimals || floor($amount) !== $amount) ? 2 : 0;
     $formatted = number_format($amount, $decimals, '.', '');
