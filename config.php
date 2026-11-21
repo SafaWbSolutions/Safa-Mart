@@ -103,6 +103,7 @@ unset($safaEarnKaroUrl);
 safa_define('EARNKARO_TIMEOUT', max(3, min(15, (int) safa_config_value('EARNKARO_TIMEOUT', 8))));
 safa_define('EARNKARO_PLATFORMS', [
     'Flipkart',
+    'Shopsy',
     'Myntra',
     'Ajio',
     'Amazon',
