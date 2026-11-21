@@ -160,7 +160,7 @@ function json_ld_offer(array $product): array
  * @param array<string,mixed> $jsonProduct
  * @return list<string>
  */
-function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): array
+function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl, string $html = ''): array
 {
     $candidates = [];
 
@@ -206,6 +206,34 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): a
         }
     }
 
+    // Last resort: photos rendered in the page itself. DigiHaat and a few
+    // Next.js stores put only a site logo in og:image while the real product
+    // photos sit in <img> tags or the embedded JSON payload.
+    if (trim($html) !== '') {
+        if (preg_match_all('~<img\b[^>]*>~i', $html, $imgTags)) {
+            foreach ($imgTags[0] as $tag) {
+                foreach (['src', 'data-src', 'data-lazy-src', 'data-original'] as $attribute) {
+                    if (preg_match('~\b' . $attribute . '\s*=\s*["\']([^"\']+)["\']~i', $tag, $attributeMatch)) {
+                        $candidates[] = html_entity_decode($attributeMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    }
+                }
+                if (preg_match('~\bsrcset\s*=\s*["\']([^"\']+)["\']~i', $tag, $srcsetMatch)) {
+                    foreach (explode(',', $srcsetMatch[1]) as $srcsetPart) {
+                        $piece = trim((string) (explode(' ', trim($srcsetPart))[0] ?? ''));
+                        if ($piece !== '') {
+                            $candidates[] = $piece;
+                        }
+                    }
+                }
+            }
+        }
+        if (preg_match_all('~https?://[^\s"\'<>\\\\]+?\.(?:jpe?g|png|webp)(?:\?[^\s"\'<>\\\\]*)?~i', $html, $imgUrls)) {
+            foreach ($imgUrls[0] as $imgUrl) {
+                $candidates[] = str_replace(['\\/', '&amp;'], ['/', '&'], $imgUrl);
+            }
+        }
+    }
+
     $urls = [];
     foreach ($candidates as $candidate) {
         $candidate = html_entity_decode(trim((string) $candidate), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -227,6 +255,56 @@ function collect_image_urls(array $meta, array $jsonProduct, string $baseUrl): a
         }
     }
     return $urls;
+}
+
+/**
+ * Pull product name/photos out of the embedded store JSON.
+ *
+ * DigiHaat (ONDC) pages publish only the site logo in OpenGraph; the real
+ * product lives in a Next.js payload as
+ * {"descriptor":{"name":...,"images":[...]}}.
+ *
+ * @return array{title:string,images:list<string>}
+ */
+function extract_embedded_product_data(string $html): array
+{
+    $empty = ['title' => '', 'images' => []];
+    if ($html === '' || strpos($html, 'descriptor') === false) {
+        return $empty;
+    }
+    $decoded = str_replace(['\\"', '\\/', '\\u002F', '\\u002f'], ['"', '/', '/', '/'], $html);
+    $anchor = strpos($decoded, '"item_details"');
+    $position = $anchor !== false ? strpos($decoded, '"descriptor"', $anchor) : false;
+    if ($position === false) {
+        $position = strpos($decoded, '"descriptor"');
+    }
+    if ($position === false) {
+        return $empty;
+    }
+    $window = substr($decoded, $position, 5000);
+
+    $title = '';
+    if (preg_match('/"name"\s*:\s*"([^"]{2,300})"/', $window, $nameMatch)) {
+        $title = clean_text($nameMatch[1]);
+    }
+
+    $images = [];
+    if (preg_match('/"images"\s*:\s*\[(.*?)\]/s', $window, $imagesMatch)) {
+        if (preg_match_all('~"([^"]+?\.(?:jpe?g|png|webp)(?:\?[^"]*)?)"~i', $imagesMatch[1], $imageMatches)) {
+            foreach ($imageMatches[1] as $candidate) {
+                $candidate = html_entity_decode($candidate, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                if (!is_probable_product_image($candidate) || in_array($candidate, $images, true)) {
+                    continue;
+                }
+                $images[] = $candidate;
+                if (count($images) >= 6) {
+                    break;
+                }
+            }
+        }
+    }
+
+    return ['title' => $title, 'images' => $images];
 }
 
 function extract_title_from_html(string $html, array $meta, array $jsonProduct): string
@@ -745,7 +823,18 @@ function scrape_product_metadata(string $url): array
         $categoryHint = clean_text($jsonProduct['category']);
     }
 
-    $images = collect_image_urls($meta, $jsonProduct, $response['effective_url'] ?? $url);
+    $images = collect_image_urls($meta, $jsonProduct, $response['effective_url'] ?? $url, $html);
+
+    // DigiHaat / ONDC pages hide the real product in the embedded JSON.
+    $embedded = extract_embedded_product_data($html);
+    if ($embedded['title'] !== '') {
+        $title = $embedded['title'];
+    }
+    if ($embedded['images']) {
+        $images = array_values(array_unique(array_merge($embedded['images'], $images)));
+        $images = array_slice($images, 0, 8);
+    }
+
     $canonical = meta_first($meta, ['og:url', 'twitter:url']);
     if ($canonical !== '' && preg_match('#^https?://#i', $canonical)) {
         $canonical = resolve_url($response['effective_url'] ?? $url, $canonical);

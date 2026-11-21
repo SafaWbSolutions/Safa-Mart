@@ -694,6 +694,49 @@ function find_merchant_url_in_query(string $url): string
  */
 function resolve_merchant_url(string $url, int $maxHops = 4, bool $canonicalize = true): string
 {
+    $resolved = resolve_merchant_url_inner($url, $maxHops, $canonicalize);
+
+    // DigiHaat "digilink" short links only reveal their product through the
+    // store's public API, so resolve one more hop when we land on one.
+    if (preg_match('~^https?://(?:www\.)?digihaat\.in/(?:en/)?digilink/([A-Za-z0-9_-]+)~i', $resolved, $match)) {
+        $productUrl = digihaat_resolve_digilink($match[1]);
+        if ($productUrl !== '') {
+            return $canonicalize ? canonicalize_product_url($productUrl) : $productUrl;
+        }
+    }
+
+    return $resolved;
+}
+
+/** Resolve a DigiHaat /digilink/<code> short link to its product URL. */
+function digihaat_resolve_digilink(string $code): string
+{
+    $response = http_request(
+        'https://prod.digihaat.in/clientApis/v2/shorten-url/' . rawurlencode($code),
+        [
+            'timeout'   => 12,
+            'max_bytes' => 65536,
+            'accept'    => 'application/json',
+            'headers'   => ['Accept: application/json', 'Origin: https://digihaat.in'],
+        ]
+    );
+    if (!$response['ok'] || (int) $response['status'] !== 200) {
+        app_log('info', 'DigiHaat digilink lookup failed', [
+            'code'   => $code,
+            'status' => (int) $response['status'],
+        ]);
+        return '';
+    }
+    $decoded = json_decode((string) $response['body'], true);
+    if (is_array($decoded) && !empty($decoded['url']) && is_string($decoded['url'])
+        && preg_match('#^https?://#i', $decoded['url'])) {
+        return $decoded['url'];
+    }
+    return '';
+}
+
+function resolve_merchant_url_inner(string $url, int $maxHops = 4, bool $canonicalize = true): string
+{
     $current = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     if ($current === '' || !preg_match('#^https?://#i', $current)) {
         return $current;
@@ -782,7 +825,10 @@ function is_probable_product_image(string $url): bool
     }
     // File names such as "mlogo.png" (Myntra's share image) have no separator
     // before "logo", so check the basename separately.
-    if (preg_match('/logo|sprite|placeholder|no[-_]?image|default[-_]?image|favicon/i', basename($path))) {
+    if (preg_match('~logo|sprite|placeholder|no[-_]?image|default[-_]?image|favicon|pixel|spacer|transparent|app-store|play-store|google-play|scanner|spinner|loader|chevron~i', basename($path))) {
+        return false;
+    }
+    if (preg_match('/\.gif$/i', $path)) {
         return false;
     }
     if (preg_match('~(?:^|[/_.-])(?:logo|logos|sprite|sprites|placeholder|noimage|no-image|default-image|default_image|site-icon|favicon|banner)(?:[/_.-]|$)~i', $path)) {
