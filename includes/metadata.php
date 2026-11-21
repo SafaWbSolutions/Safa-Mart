@@ -289,6 +289,9 @@ function collect_specifications(string $html, array $jsonProduct): array
         if (preg_match('/₹|view similar|upto|applied|bank offer|free delivery|product sold|key product attributes|delivered on/i', $value)) {
             return;
         }
+        if (strcasecmp($value, 'NA') === 0 || strcasecmp($value, 'N/A') === 0) {
+            return;
+        }
         $id = strtolower($key);
         if (!isset($specs[$id])) {
             $specs[$id] = ['key' => $key, 'value' => $value];
@@ -340,6 +343,27 @@ function collect_specifications(string $html, array $jsonProduct): array
             }
             if (count($specs) >= 30) {
                 break;
+            }
+        }
+    }
+
+    // 2c) Myntra-style attributes: {"articleAttributes":{"Fabrics":"Pure Cotton",...}}
+    $attrDecoded = str_replace(
+        ['\\"', '\\/', '\\u002F', '\\u002f', '\\u003Cbr\\u003E', '\\u003C', '\\u003E'],
+        ['"', '/', '/', '/', ' ', '<', '>'],
+        $html
+    );
+    if (preg_match('/"articleAttributes"\s*:\s*\{(.*?)\}/s', $attrDecoded, $attrBlock)) {
+        if (preg_match_all('/"([^"]{2,60})"\s*:\s*"([^"]{1,200})"/', $attrBlock[1], $attrPairs, PREG_SET_ORDER)) {
+            foreach ($attrPairs as $pair) {
+                $add($pair[1], $pair[2]);
+            }
+        }
+    }
+    if (preg_match('/"productDetails"\s*:\s*\[(.*?)\]/s', $attrDecoded, $detailsBlock)) {
+        if (preg_match_all('/"title"\s*:\s*"([^"]+)"\s*,\s*"description"\s*:\s*"([^"]*)"/', $detailsBlock[1], $detailPairs, PREG_SET_ORDER)) {
+            foreach ($detailPairs as $pair) {
+                $add($pair[1], $pair[2]);
             }
         }
     }

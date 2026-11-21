@@ -803,6 +803,8 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
             return
         if re.search(r"₹|view similar|upto|applied|bank offer|free delivery|product sold|key product attributes|delivered on", value, re.I):
             return
+        if value.strip().upper() in ("NA", "N/A"):
+            return
         lowered = key.lower()
         if lowered in seen_specs:
             return
@@ -824,6 +826,21 @@ def parse_metadata(html: str, base_url: str) -> dict[str, Any]:
                 add_spec(match.group(1), match.group(2))
             for match in re.finditer(r'"value"\s*:\s*"([^"]+)"\s*,\s*"key"\s*:\s*"([^"]+)"', tag_block.group(1)):
                 add_spec(match.group(2), match.group(1))
+
+    # Myntra-style attributes and descriptors.
+    attr_decoded = (
+        html.replace('\\"', '"').replace('\\/', '/')
+        .replace('\\u002F', '/').replace('\\u002f', '/')
+        .replace('\\u003Cbr\\u003E', ' ').replace('\\u003C', '<').replace('\\u003E', '>')
+    )
+    attr_block = re.search(r'"articleAttributes"\s*:\s*\{(.*?)\}', attr_decoded, re.S)
+    if attr_block:
+        for match in re.finditer(r'"([^"]{2,60})"\s*:\s*"([^"]{1,200})"', attr_block.group(1)):
+            add_spec(match.group(1), match.group(2))
+    detail_block = re.search(r'"productDetails"\s*:\s*\[(.*?)\]', attr_decoded, re.S)
+    if detail_block:
+        for match in re.finditer(r'"title"\s*:\s*"([^"]+)"\s*,\s*"description"\s*:\s*"([^"]*)"', detail_block.group(1)):
+            add_spec(match.group(1), match.group(2))
 
     # Flipkart / Shopsy embedded spec pairs.
     for match in re.finditer(r'\\?"label_0\\?"\s*:\s*\{\s*"value"\s*:\s*\{\s*"text"\s*:\s*\[?\s*"([^"]{1,60})"', html):
