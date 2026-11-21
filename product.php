@@ -380,7 +380,15 @@ $faqSchema = [
     <script type="application/ld+json"><?= json_encode($breadcrumbSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 <script type="application/ld+json"><?= json_encode($faqSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </head>
-<body class="product-page">
+<body class="product-page" data-product-view="<?= e(json_encode([
+    'id'       => $id,
+    'slug'     => $slug,
+    'title'    => $title,
+    'category' => $category,
+    'platform' => $platform,
+    'brand'    => $brand,
+    'price'    => $price,
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) ?>">
 <div class="top-strip product-top-strip">
     <div class="site-container top-strip-inner">
         <?php if ($discount > 0): ?>
@@ -764,15 +772,15 @@ $faqSchema = [
     </section>
 
     <?php if ($related): ?>
-        <section class="related-section" aria-labelledby="relatedHeading">
+        <section class="related-section" aria-labelledby="relatedHeading" data-related-section>
             <div class="section-heading">
                 <div>
                     <h2 id="relatedHeading">More deals you'll love</h2>
-                    <p>Handpicked <?= e($category !== '' ? strtolower($category) : 'deals') ?> at similar prices</p>
+                    <p id="relatedSubtitle">Handpicked <?= e($category !== '' ? strtolower($category) : 'deals') ?> at similar prices</p>
                 </div>
                 <a class="clear-filters" href="<?= e(site_url('index.php?category=' . rawurlencode($category))) ?>">View all</a>
             </div>
-            <div class="product-grid">
+            <div class="product-grid" id="relatedGrid">
                 <?php foreach ($related as $relatedProduct): ?>
                     <?= render_product_card($relatedProduct) ?>
                 <?php endforeach; ?>

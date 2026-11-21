@@ -257,12 +257,31 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         $query .= '&source_platform=eq.' . rawurlencode($platform);
     }
     $search = clean_search_term((string) ($filters['q'] ?? ''));
-    if ($search !== '') {
-        $pattern = rawurlencode('*' . $search . '*');
-        $query .= '&or=(title.ilike.' . $pattern
-            . ',category.ilike.' . $pattern
-            . ',source_platform.ilike.' . $pattern
-            . ',brand.ilike.' . $pattern . ')';
+    $searchTerms = [];
+    foreach ((array) ($filters['q_terms'] ?? []) as $term) {
+        $term = clean_search_term((string) $term);
+        if ($term === '') {
+            continue;
+        }
+        $searchTerms[$term] = true;
+        if (count($searchTerms) >= 7) {
+            break;
+        }
+    }
+    if (!$searchTerms && $search !== '') {
+        $searchTerms[$search] = true;
+    }
+    $searchTerms = array_keys($searchTerms);
+    if ($searchTerms) {
+        $ors = [];
+        foreach ($searchTerms as $term) {
+            $pattern = rawurlencode('*' . $term . '*');
+            $ors[] = 'title.ilike.' . $pattern;
+            $ors[] = 'category.ilike.' . $pattern;
+            $ors[] = 'source_platform.ilike.' . $pattern;
+            $ors[] = 'brand.ilike.' . $pattern;
+        }
+        $query .= '&or=(' . implode(',', $ors) . ')';
     }
 
     $minPrice = (float) ($filters['min_price'] ?? 0);
@@ -313,10 +332,15 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         if ($minDiscount > 0) {
             $fallback .= '&discount_percent=gte.' . max(1, min(99, $minDiscount));
         }
-        if ($search !== '') {
-            $fallback .= '&or=(title.ilike.' . $pattern
-                . ',category.ilike.' . $pattern
-                . ',source_platform.ilike.' . $pattern . ')';
+        if ($searchTerms) {
+            $fallbackOrs = [];
+            foreach ($searchTerms as $term) {
+                $fallbackPattern = rawurlencode('*' . $term . '*');
+                $fallbackOrs[] = 'title.ilike.' . $fallbackPattern;
+                $fallbackOrs[] = 'category.ilike.' . $fallbackPattern;
+                $fallbackOrs[] = 'source_platform.ilike.' . $fallbackPattern;
+            }
+            $fallback .= '&or=(' . implode(',', $fallbackOrs) . ')';
         }
         $result = supabase_request('GET', supabase_table() . '?' . $fallback);
     }

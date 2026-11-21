@@ -20,6 +20,7 @@
 
     var state = {
         q: current.q || '',
+        searchTerms: Array.isArray(current.searchTerms) ? current.searchTerms.slice(0, 7) : [],
         category: current.category || '',
         platform: current.platform || '',
         sort: current.sort || '',
@@ -53,6 +54,109 @@
                 '"': '&quot;',
                 "'": '&#39;'
             }[char];
+        });
+    }
+
+    /* ---------- Anonymous behaviour (stored on this device only) ---------- */
+    var BEHAVIOUR_KEY = 'safa_behaviour_v1';
+
+    function behaviourLoad() {
+        try {
+            var raw = window.localStorage.getItem(BEHAVIOUR_KEY);
+            var data = raw ? JSON.parse(raw) : null;
+            if (!data || typeof data !== 'object') {
+                data = {};
+            }
+            return {
+                views: Array.isArray(data.views) ? data.views.slice(0, 10) : [],
+                queries: Array.isArray(data.queries) ? data.queries.slice(0, 6) : [],
+                interests: Array.isArray(data.interests) ? data.interests.slice(0, 10) : []
+            };
+        } catch (error) {
+            return { views: [], queries: [], interests: [] };
+        }
+    }
+
+    function behaviourSave(data) {
+        try {
+            window.localStorage.setItem(BEHAVIOUR_KEY, JSON.stringify(data));
+        } catch (error) {
+            /* storage blocked — recommendations fall back to server defaults */
+        }
+    }
+
+    function behaviourSignals() {
+        var data = behaviourLoad();
+        return data.views.length + data.queries.length + data.interests.length;
+    }
+
+    function behaviourView(product) {
+        var id = Number(product && product.id);
+        if (!id) {
+            return;
+        }
+        var data = behaviourLoad();
+        data.views = data.views.filter(function (view) {
+            return String(view.id) !== String(id);
+        });
+        data.views.unshift({
+            id: id,
+            slug: String(product.slug || ''),
+            title: String(product.title || '').slice(0, 120),
+            category: String(product.category || ''),
+            platform: String(product.platform || ''),
+            brand: String(product.brand || ''),
+            price: Number(product.price) || 0
+        });
+        data.views = data.views.slice(0, 10);
+        behaviourSave(data);
+    }
+
+    function behaviourQuery(query) {
+        query = String(query || '').trim().slice(0, 60);
+        if (!query) {
+            return;
+        }
+        var data = behaviourLoad();
+        data.queries = data.queries.filter(function (item) {
+            return item.toLowerCase() !== query.toLowerCase();
+        });
+        data.queries.unshift(query);
+        data.queries = data.queries.slice(0, 6);
+        behaviourSave(data);
+    }
+
+    function behaviourInterest(value) {
+        value = String(value || '').trim().slice(0, 40);
+        if (!value) {
+            return;
+        }
+        var data = behaviourLoad();
+        data.interests = data.interests.filter(function (item) {
+            return item.toLowerCase() !== value.toLowerCase();
+        });
+        data.interests.unshift(value);
+        data.interests = data.interests.slice(0, 10);
+        behaviourSave(data);
+    }
+
+    function fetchRecommendations(context, done) {
+        var data = behaviourLoad();
+        fetch('api/recommend.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current: context.current || null,
+                views: data.views,
+                queries: data.queries.concat(data.interests),
+                exclude: context.exclude || []
+            })
+        }).then(function (response) {
+            return response.json();
+        }).then(function (payload) {
+            done(payload && payload.ok ? payload : null);
+        }).catch(function () {
+            done(null);
         });
     }
 
@@ -345,10 +449,30 @@
         if (state.minRating > 0) {
             params.set('rating', 'gte.' + state.minRating);
         }
-        var search = sanitizeSearch(state.q);
-        if (search !== '') {
-            var pattern = '*' + search + '*';
-            params.set('or', '(title.ilike.' + pattern + ',category.ilike.' + pattern + ',source_platform.ilike.' + pattern + ',brand.ilike.' + pattern + ')');
+        if (state.searchTerms && state.searchTerms.length > 1) {
+            var conditions = [];
+            state.searchTerms.forEach(function (term) {
+                var cleanTerm = sanitizeSearch(term);
+                if (!cleanTerm) {
+                    return;
+                }
+                var cleanPattern = '*' + cleanTerm + '*';
+                conditions.push(
+                    'title.ilike.' + cleanPattern,
+                    'category.ilike.' + cleanPattern,
+                    'source_platform.ilike.' + cleanPattern,
+                    'brand.ilike.' + cleanPattern
+                );
+            });
+            if (conditions.length) {
+                params.set('or', '(' + conditions.join(',') + ')');
+            }
+        } else {
+            var search = sanitizeSearch(state.q);
+            if (search !== '') {
+                var pattern = '*' + search + '*';
+                params.set('or', '(title.ilike.' + pattern + ',category.ilike.' + pattern + ',source_platform.ilike.' + pattern + ',brand.ilike.' + pattern + ')');
+            }
         }
         return params.toString().replace(/\+/g, '%20');
     }
@@ -494,21 +618,27 @@
     /* ---------- Index page: search, filters, pagination ---------- */
     if (grid) {
         if (searchForm) {
-            searchForm.addEventListener('submit', function (event) {
-                event.preventDefault();
-                state.q = searchInput ? searchInput.value.trim() : '';
-                resetAndLoad();
+            searchForm.addEventListener('submit', function () {
+                if (searchInput) {
+                    behaviourQuery(searchInput.value);
+                }
+                // Normal form navigation: the server adds AI query expansion,
+                // so results stay consistent for the whole search session.
             });
         }
 
         if (searchInput) {
             var searchTimer = null;
             searchInput.addEventListener('input', function () {
+                state.searchTerms = [];
                 window.clearTimeout(searchTimer);
                 searchTimer = window.setTimeout(function () {
                     state.q = searchInput.value.trim();
                     resetAndLoad();
                 }, 450);
+            });
+            searchInput.addEventListener('blur', function () {
+                behaviourQuery(searchInput.value);
             });
         }
 
@@ -519,6 +649,10 @@
                 }
                 event.preventDefault();
                 state.category = chip.dataset.category || '';
+                state.searchTerms = [];
+                if (state.category) {
+                    behaviourInterest(state.category);
+                }
                 resetAndLoad();
             });
         });
@@ -530,6 +664,10 @@
                 }
                 event.preventDefault();
                 state.platform = chip.dataset.platform || '';
+                state.searchTerms = [];
+                if (state.platform) {
+                    behaviourInterest(state.platform);
+                }
                 resetAndLoad();
             });
         });
@@ -537,6 +675,7 @@
         $all('[data-clear-filters]').forEach(function (button) {
             button.addEventListener('click', function () {
                 state.q = '';
+                state.searchTerms = [];
                 state.category = '';
                 state.platform = '';
                 if (searchInput) {
@@ -822,6 +961,64 @@
         render();
         start();
     });
+
+    /* ---------- Behaviour tracking + personalised recommendations ---------- */
+    var productView = null;
+    try {
+        productView = JSON.parse(document.body.getAttribute('data-product-view') || 'null');
+    } catch (error) {
+        productView = null;
+    }
+    if (productView && productView.id) {
+        behaviourView(productView);
+    }
+
+    document.addEventListener('click', function (event) {
+        var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+        if (!link) {
+            return;
+        }
+        var href = link.getAttribute('href') || '';
+        var match = href.match(/\/deals\/([a-z0-9-]+)/i) || href.match(/\/store\/([a-z0-9-]+)/i);
+        if (match && match[1] !== 'under-499' && match[1] !== 'under-999' && match[1] !== 'under-1999') {
+            behaviourInterest(match[1]);
+        }
+    });
+
+    var relatedGrid = document.getElementById('relatedGrid');
+    if (relatedGrid && productView && behaviourSignals() >= 2) {
+        fetchRecommendations({
+            current: productView,
+            exclude: [productView.id]
+        }, function (payload) {
+            if (!payload || !payload.html || payload.count < 4) {
+                return;
+            }
+            relatedGrid.innerHTML = payload.html;
+            var subtitle = document.getElementById('relatedSubtitle');
+            if (subtitle) {
+                subtitle.textContent = 'Picked for you from the deals you viewed and searched';
+            }
+            var heading = document.getElementById('relatedHeading');
+            if (heading) {
+                heading.textContent = 'More deals picked for you';
+            }
+        });
+    }
+
+    var forYouSection = document.getElementById('forYouSection');
+    if (forYouSection && behaviourSignals() >= 2) {
+        fetchRecommendations({ current: null, exclude: [] }, function (payload) {
+            if (!payload || !payload.html || payload.count < 4) {
+                return;
+            }
+            var forYouGrid = document.getElementById('forYouGrid');
+            if (forYouGrid) {
+                forYouGrid.innerHTML = payload.html;
+            }
+            forYouSection.hidden = false;
+        });
+    }
 
     /* ---------- Small UX niceties ---------- */
     if (header) {

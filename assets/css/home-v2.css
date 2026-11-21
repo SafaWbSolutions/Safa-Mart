@@ -723,6 +723,11 @@
     .event-hero p { font-size: 12.5px; }
 }
 
+/* ---------- Recommended for you ---------- */
+.for-you-section { margin: 18px 0 6px; }
+.for-you-section[hidden] { display: none !important; }
+.for-you-section .product-grid { margin-top: 6px; }
+
 /* ---------- Price drops ---------- */
 .card-drop {
     position: absolute;

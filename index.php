@@ -3,6 +3,7 @@ require_once __DIR__ . '/config.php';
 security_headers();
 
 $searchQuery = clean_search_term((string) ($_GET['q'] ?? ''));
+$searchTerms = [];
 $category = trim((string) ($_GET['category'] ?? ''));
 $platform = trim((string) ($_GET['platform'] ?? ''));
 if (!in_array($category, PRODUCT_CATEGORIES, true)) {
@@ -36,6 +37,7 @@ if (!in_array($minRating, [3.0, 4.0, 4.5], true)) {
 
 $filters = [
     'q'            => $searchQuery,
+    'q_terms'      => $searchTerms,
     'category'     => $category,
     'platform'     => $platform,
     'sort'         => $sort,
@@ -46,6 +48,17 @@ $filters = [
     'min_rating'   => $minRating,
 ];
 $products = fetch_storefront_products($filters, PRODUCTS_PER_PAGE);
+
+// If a search has few matches, ask the AI for related product words and retry
+// once. With no API key (or a failure) this keeps the plain results.
+if ($searchQuery !== '' && count($products) < 6) {
+    $expandedTerms = ai_expand_query($searchQuery);
+    if (count($expandedTerms) > 1) {
+        $searchTerms = $expandedTerms;
+        $filters['q_terms'] = $searchTerms;
+        $products = fetch_storefront_products($filters, PRODUCTS_PER_PAGE);
+    }
+}
 $facets = fetch_filter_facets();
 $hasMore = count($products) >= PRODUCTS_PER_PAGE;
 $hasFilters = $searchQuery !== '' || $category !== '' || $platform !== ''
@@ -226,6 +239,7 @@ if (SUPABASE_URL !== '') {
             'pageSize'    => PRODUCTS_PER_PAGE,
             'defaultOrder'=> $heroDefaultOrder,
             'featuredBadges' => featured_badges(),
+            'searchTerms' => array_values($searchTerms),
             'current'     => [
                 'q'            => $searchQuery,
                 'category'     => $category,
@@ -596,6 +610,22 @@ if (SUPABASE_URL !== '') {
     <?php endif; ?>
 
     <?= ad_slot('home-mid') ?>
+
+    <?php if (!$hasFilters): ?>
+        <section class="deal-rail-section for-you-section" id="forYouSection" hidden aria-labelledby="forYouHeading">
+            <div class="rail-head">
+                <div class="rail-head-text">
+                    <h2 id="forYouHeading"><span aria-hidden="true">✨</span> Recommended for you</h2>
+                    <p id="forYouNote">Based on the deals you viewed and searched on this device</p>
+                </div>
+                <a class="rail-link" href="<?= e(site_url('index.php?sort=discount_desc')) ?>">
+                    Explore more
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </a>
+            </div>
+            <div class="product-grid" id="forYouGrid"></div>
+        </section>
+    <?php endif; ?>
 
     <section class="products-section" aria-labelledby="dealsHeading">
         <div class="section-heading">

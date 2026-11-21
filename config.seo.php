@@ -26,6 +26,16 @@ return [
     // site root with the same value: <key>.txt
     'INDEXNOW_KEY' => 'a3f9c2b7d4e6f8102c4b6d8e0f2a4c6e',
 
+    // ------------------------------------------------------------------
+    // AI recommendations + semantic search (OpenRouter, optional)
+    // ------------------------------------------------------------------
+    // Free key: https://openrouter.ai/keys
+    'OPENROUTER_API_KEY' => '',
+    // Any free chat model from https://openrouter.ai/models?max_price=0
+    'OPENROUTER_MODEL'   => 'meta-llama/llama-3.3-70b-instruct:free',
+    'AI_RECOMMENDATIONS' => true,
+    'AI_QUERY_EXPANSION' => true,
+
     // Ads (jab live karna ho tab bharo)
     // 'ADSENSE_CLIENT' => 'ca-pub-XXXXXXXXXXXXXXXX',
     // 'AD_SLOTS' => [

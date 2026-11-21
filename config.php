@@ -204,6 +204,13 @@ safa_define('GOOGLE_ANALYTICS_ID', trim((string) safa_config_value('GOOGLE_ANALY
 safa_define('SEO_SITEMAP_CACHE_TTL', max(300, min(86400, (int) safa_config_value('SEO_SITEMAP_CACHE_TTL', 1800))));
 safa_define('INDEXNOW_KEY', trim((string) safa_config_value('INDEXNOW_KEY', '')));
 
+// AI recommendations + semantic search (OpenRouter is optional; everything
+// falls back to deterministic behaviour when the key is missing).
+safa_define('OPENROUTER_API_KEY', trim((string) safa_config_value('OPENROUTER_API_KEY', '')));
+safa_define('OPENROUTER_MODEL', trim((string) safa_config_value('OPENROUTER_MODEL', 'meta-llama/llama-3.3-70b-instruct:free')));
+safa_define('AI_RECOMMENDATIONS', safa_bool(safa_config_value('AI_RECOMMENDATIONS', true)));
+safa_define('AI_QUERY_EXPANSION', safa_bool(safa_config_value('AI_QUERY_EXPANSION', true)));
+
 
 /**
  * Stores that are permanently rejected: the Telegram bot never processes them
@@ -256,3 +263,5 @@ require_once __DIR__ . '/includes/seo.php';
 require_once __DIR__ . '/includes/guides.php';
 require_once __DIR__ . '/includes/events.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/ai.php';
+require_once __DIR__ . '/includes/recommend.php';
