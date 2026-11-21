@@ -169,10 +169,7 @@ if ($command === '/repairlinks') {
 
         $looksAffiliated = $affiliateUrl !== ''
             && $affiliateUrl !== $originalUrl
-            && (bool) preg_match(
-                '~(?:earnkaro|ekaro|bitli|myntr\.it|ajiio\.in|fkrt\.it|dl\.flipkart\.com|shopsy\.in|amzn\.to|[?&](?:affid|affExtParam\d*|tag)=)~i',
-                $affiliateUrl
-            );
+            && is_affiliate_url($affiliateUrl);
         if ($looksAffiliated) {
             $already++;
             continue;
@@ -303,11 +300,12 @@ $seen = [];
 
 foreach ($urls as $url) {
     try {
-        if (!is_safe_remote_url($url)) {
+        $rawUrl = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (!is_safe_remote_url($rawUrl)) {
             throw new RuntimeException('That URL is invalid or not publicly reachable.');
         }
 
-        $canonicalUrl = canonicalize_product_url($url);
+        $canonicalUrl = canonicalize_product_url($rawUrl);
         if (isset($seen[$canonicalUrl])) {
             throw new RuntimeException('This link was already included in the message.');
         }
@@ -330,6 +328,20 @@ foreach ($urls as $url) {
         }
 
         $affiliate = convert_to_affiliate($productUrl, $platform);
+        if (!$affiliate['converted'] && is_affiliate_url($rawUrl) && $rawUrl !== $productUrl) {
+            // Sender ne link pehle se converter se convert kiya hua bheja hai.
+            // Re-conversion fail ho to unka tracking link hi rakhna hai.
+            $affiliate = [
+                'url'      => $rawUrl,
+                'platform' => $platform,
+                'converted' => true,
+                'error'    => null,
+            ];
+            app_log('info', 'Kept sender provided affiliate link', [
+                'platform' => $platform,
+                'url'      => $rawUrl,
+            ]);
+        }
         $metadata = scrape_product_metadata($productUrl);
 
         if (($metadata['availability'] ?? 'unknown') === 'out_of_stock') {

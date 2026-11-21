@@ -439,6 +439,59 @@ function is_blocked_product(array $product): bool
 }
 
 /**
+ * True when a URL already carries affiliate tracking.
+ *
+ * Such links must never be resolved and converted again, otherwise the
+ * tracking is lost and the click earns nothing. EarnKaro's Flipkart output is
+ * https://dl.flipkart.com/s/XXXX, its Myntra output is a linkredirect/tracking
+ * URL, and direct merchant links may carry affid / tag query parameters.
+ */
+function is_affiliate_url(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || !preg_match('#^https?://#i', $url)) {
+        return false;
+    }
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return false;
+    }
+    $host = strtolower((string) ($parts['host'] ?? ''));
+    $path = strtolower((string) ($parts['path'] ?? ''));
+
+    $affiliateHosts = [
+        'earnkaro.com', 'ekaro.in', 'ekaro.co', 'earnkaro.in',
+        'bitli.in', 'linkredirect.in', 'myntr.it', 'ajiio.in',
+        'fkrt.it', 'fkrt.co', 'shopsy.in', 'amzn.to',
+    ];
+    foreach ($affiliateHosts as $domain) {
+        if ($host === $domain || str_ends_with($host, '.' . $domain)) {
+            return true;
+        }
+    }
+
+    // Flipkart's affiliate short link.
+    if ($host === 'dl.flipkart.com' && str_starts_with($path, '/s/')) {
+        return true;
+    }
+
+    $query = (string) ($parts['query'] ?? '');
+    if ($query !== '') {
+        foreach (explode('&', $query) as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+            $key = strtolower(explode('=', $pair, 2)[0]);
+            if (preg_match('/^(?:affid|affextparam\d*|tag|linkcode|linkid|icid)$/', $key)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * PostgREST filter that keeps blocked stores out of every storefront query.
  * Applied alongside the PHP-side filter in the Supabase helpers.
  */
