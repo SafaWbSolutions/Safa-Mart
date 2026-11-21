@@ -280,7 +280,7 @@ foreach ($candidateUrls as $url) {
     if ($url !== '' && preg_match('#^https?://#i', $url) && !in_array($url, $urls, true)) {
         $urls[] = $url;
     }
-    if (count($urls) >= 2) {
+    if (count($urls) >= 4) {
         break;
     }
 }
@@ -296,7 +296,7 @@ $expandedUrls = [];
 foreach ($urls as $url) {
     $candidate = resolve_merchant_url($url, 4, false);
     if ($candidate !== '' && !is_product_page_url($candidate) && detect_platform($candidate) !== 'Other') {
-        $expanded = expand_collection_url($candidate, 2, affiliate_params_from_url($url));
+        $expanded = expand_collection_url($candidate, 4, affiliate_params_from_url($url));
         if ($expanded) {
             foreach ($expanded as $expandedUrl) {
                 if (!in_array($expandedUrl, $expandedUrls, true)) {
@@ -308,18 +308,24 @@ foreach ($urls as $url) {
     }
     $expandedUrls[] = $url;
 }
-$urls = array_slice($expandedUrls, 0, 4);
+$urls = array_slice($expandedUrls, 0, 8);
 
-@set_time_limit(110);
+@set_time_limit(120);
 ignore_user_abort(true);
+$deadline = microtime(true) + 95;
+$timedOut = false;
 
-telegram_send_message($chatId, '⏳ Processing ' . count($urls) . ' link' . (count($urls) === 1 ? '' : 's') . '…');
+telegram_send_message($chatId, '⏳ Processing ' . count($urls) . ' product' . (count($urls) === 1 ? '' : 's') . '…');
 
 $listed = 0;
 $failed = 0;
 $seen = [];
 
 foreach ($urls as $url) {
+    if (microtime(true) >= $deadline) {
+        $timedOut = true;
+        break;
+    }
     try {
         $rawUrl = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         if (!is_safe_remote_url($rawUrl)) {
@@ -475,8 +481,12 @@ foreach ($urls as $url) {
     }
 }
 
-if (count($urls) > 1) {
-    telegram_send_message($chatId, '📊 Finished: ' . $listed . ' listed, ' . $failed . ' failed.');
+$summary = '📊 Finished: ' . $listed . ' listed, ' . $failed . ' failed.';
+if ($timedOut) {
+    $summary .= "\n⏱️ Time limit reached — baaki products dobara bhej dena.";
+}
+if (count($urls) > 1 || $timedOut) {
+    telegram_send_message($chatId, $summary);
 }
 
 json_response(['ok' => true, 'listed' => $listed, 'failed' => $failed]);

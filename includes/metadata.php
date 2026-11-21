@@ -460,7 +460,7 @@ function ajio_simple_search_url(string $url): string
  */
 function expand_collection_url(string $url, int $limit = 2, array $affiliateParams = []): array
 {
-    $limit = max(1, min(5, $limit));
+    $limit = max(1, min(8, $limit));
     $platform = detect_platform($url);
     if ($platform === 'Other') {
         return [];
