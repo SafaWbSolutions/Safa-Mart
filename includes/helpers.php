@@ -106,6 +106,12 @@ function security_headers(): void
             . ' https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google';
     }
 
+    if (defined('GOOGLE_ANALYTICS_ID') && trim((string) GOOGLE_ANALYTICS_ID) !== '') {
+        $adsScript .= ' https://www.googletagmanager.com https://www.google-analytics.com';
+        $adsConnect .= ' https://www.googletagmanager.com https://www.google-analytics.com'
+            . ' https://*.google-analytics.com';
+    }
+
     $csp = "default-src 'self'; "
         . "base-uri 'self'; "
         . "frame-ancestors 'none'; "

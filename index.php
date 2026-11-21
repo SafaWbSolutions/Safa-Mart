@@ -144,6 +144,15 @@ $pageTitle = $searchQuery !== ''
 $pageDescription = $searchQuery !== ''
     ? 'Shop ' . $searchQuery . ' deals from Flipkart, Myntra and Amazon at the lowest prices.'
     : SITE_DESCRIPTION;
+$indexable = $searchQuery === '' && !$hasFilters;
+$ogImage = '';
+foreach ($products as $ogProduct) {
+    $ogUrl = (string) ($ogProduct['thumbnail_url'] ?? '');
+    if (preg_match('#^https?://#i', $ogUrl)) {
+        $ogImage = $ogUrl;
+        break;
+    }
+}
 $supabaseOrigin = '';
 if (SUPABASE_URL !== '') {
     $parts = parse_url(SUPABASE_URL);
@@ -160,16 +169,29 @@ if (SUPABASE_URL !== '') {
     <meta name="theme-color" content="#e91e63">
     <title><?= e($pageTitle) ?></title>
     <meta name="description" content="<?= e($pageDescription) ?>">
-    <meta name="robots" content="<?= $searchQuery !== '' ? 'noindex,follow' : 'index,follow' ?>">
+    <?= seo_robots_meta($indexable) ?>
     <link rel="canonical" href="<?= e(site_url('index.php')) ?>">
+    <?= seo_hreflang_links(site_url('index.php')) ?>
+    <?php foreach (seo_verification_meta() as $verificationTag): ?>
+        <?= $verificationTag ?>
+    <?php endforeach; ?>
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="<?= e(APP_NAME) ?>">
     <meta property="og:title" content="<?= e($pageTitle) ?>">
     <meta property="og:description" content="<?= e($pageDescription) ?>">
     <meta property="og:url" content="<?= e(site_url('index.php')) ?>">
-    <meta name="twitter:card" content="summary">
+    <?php if ($ogImage !== ''): ?>
+        <meta property="og:image" content="<?= e($ogImage) ?>">
+        <meta property="og:image:alt" content="<?= e(APP_NAME) ?> trending deals">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:image" content="<?= e($ogImage) ?>">
+    <?php else: ?>
+        <meta name="twitter:card" content="summary">
+    <?php endif; ?>
     <meta name="twitter:title" content="<?= e($pageTitle) ?>">
     <meta name="twitter:description" content="<?= e($pageDescription) ?>">
+    <?= seo_site_schema() ?>
+    <?= seo_analytics_snippet() ?>
     <?php if ($supabaseOrigin !== ''): ?>
         <link rel="preconnect" href="<?= e($supabaseOrigin) ?>" crossorigin>
     <?php endif; ?>
@@ -634,6 +656,28 @@ if (SUPABASE_URL !== '') {
         <div id="infiniteSentinel" class="infinite-sentinel" aria-hidden="true"></div>
         <?= ad_slot('home-bottom') ?>
     </section>
+
+    <?php if (!$hasFilters): ?>
+        <section class="browse-links" aria-labelledby="seoBrowseHeading">
+            <h2 id="seoBrowseHeading">Shop deals by category and store</h2>
+            <div class="browse-link-grid">
+                <?php foreach (seo_category_catalog() as $seoCatName => $seoCatMeta): ?>
+                    <a class="category-chip" href="<?= e(site_url('deals/' . $seoCatMeta['slug'])) ?>"><?= e($seoCatName) ?> deals</a>
+                <?php endforeach; ?>
+                <?php foreach (seo_store_catalog() as $seoStoreName => $seoStoreMeta): ?>
+                    <a class="category-chip" href="<?= e(site_url('store/' . $seoStoreMeta['slug'])) ?>"><?= e($seoStoreName) ?> deals</a>
+                <?php endforeach; ?>
+            </div>
+        </section>
+
+        <section class="browse-copy" aria-labelledby="seoAboutHeading">
+            <h2 id="seoAboutHeading"><?= e(APP_NAME) ?> — India's smart deal discovery site</h2>
+            <p><?= e(APP_NAME) ?> collects live discounts from Flipkart, Myntra, Amazon, Ajio, Shopsy and DigiHaat in one clean feed. Instead of scrolling six apps, you browse one page where every product shows the current price, the listed MRP, the real discount percentage and the store it comes from.</p>
+            <p>We only list products that have a working affiliate link and a direct store page. When you tap <strong>Buy Now</strong> you go straight to the official merchant listing — the price stays the same and checkout, delivery and returns are handled by the store you already trust.</p>
+            <h2>Fresh deals, honest discounts</h2>
+            <p>New offers are added through the day and old or unavailable products are hidden automatically. Use the filters to sort by biggest discount, lowest price, top rating or brand, or open a <a href="<?= e(site_url('deals/fashion')) ?>">fashion</a>, <a href="<?= e(site_url('deals/electronics')) ?>">electronics</a> or <a href="<?= e(site_url('deals/home-kitchen')) ?>">home &amp; kitchen</a> collection to see a focused list.</p>
+        </section>
+    <?php endif; ?>
 </main>
 
 <footer class="site-footer">
@@ -652,13 +696,15 @@ if (SUPABASE_URL !== '') {
         <div class="footer-links">
             <h3>Shop by category</h3>
             <?php foreach (PRODUCT_CATEGORIES as $cat): ?>
-                <a href="<?= e($buildUrl(['category' => $cat, 'platform' => ''])) ?>"><?= e($cat) ?></a>
+                <?php $footerCatSlug = seo_category_catalog()[$cat]['slug'] ?? ''; ?>
+                <a href="<?= e($footerCatSlug !== '' ? site_url('deals/' . $footerCatSlug) : $buildUrl(['category' => $cat])) ?>"><?= e($cat) ?></a>
             <?php endforeach; ?>
         </div>
         <div class="footer-links">
             <h3>Top stores</h3>
             <?php foreach (PLATFORM_FILTERS as $store): ?>
-                <a href="<?= e($buildUrl(['platform' => $store, 'category' => ''])) ?>"><?= e($store) ?> deals</a>
+                <?php $footerStoreSlug = seo_store_catalog()[$store]['slug'] ?? ''; ?>
+                <a href="<?= e($footerStoreSlug !== '' ? site_url('store/' . $footerStoreSlug) : $buildUrl(['platform' => $store])) ?>"><?= e($store) ?> deals</a>
             <?php endforeach; ?>
         </div>
         <div class="footer-disclosure">
@@ -696,6 +742,7 @@ if (SUPABASE_URL !== '') {
 </footer>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<?php require __DIR__ . '/includes/telegram_button.php'; ?>
 <?php require __DIR__ . '/includes/telegram_popup.php'; ?>
 </body>
 </html>

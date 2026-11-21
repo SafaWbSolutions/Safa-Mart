@@ -7,10 +7,16 @@ AddDefaultCharset UTF-8
     RewriteEngine On
     # Never expose automation scripts, logs or repository metadata.
     RewriteRule ^(automation|logs|\.github|\.git)(/|$) - [F,L,NC]
+
+    # SEO entry points and clean landing URLs.
+    RewriteRule ^sitemap\.xml$ sitemap.php [L]
+    RewriteRule ^feed\.xml$ feed.php [L]
+    RewriteRule ^deals/([a-z0-9-]+)/?$ browse.php?type=category&slug=$1 [L,QSA]
+    RewriteRule ^store/([a-z0-9-]+)/?$ browse.php?type=store&slug=$1 [L,QSA]
 </IfModule>
 
 # Block direct HTTP access to configuration and schema files.
-<FilesMatch "^(config\.php|config\.local\.php|database\.sql|README\.md|composer\.(json|lock)|\.gitignore)$">
+<FilesMatch "^(config\.php|config\.local\.php|database\.sql|README\.md|SPOTLIGHT-ADS-GUIDE\.md|SEO-PLAYBOOK\.md|composer\.(json|lock)|\.gitignore)$">
     Require all denied
 </FilesMatch>
 

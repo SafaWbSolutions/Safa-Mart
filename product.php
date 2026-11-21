@@ -215,6 +215,7 @@ $schema = [
     'sku'         => (string) $id,
     'url'         => $productUrl,
     'brand'       => ['@type' => 'Brand', 'name' => $brand !== '' ? $brand : $platform],
+    'category'    => $category !== '' ? $category : 'Deals',
     'offers'      => [
         '@type'         => 'Offer',
         'url'           => $buyUrl,
@@ -222,7 +223,7 @@ $schema = [
         'price'         => number_format(max(0, $price), 2, '.', ''),
         'availability'  => 'https://schema.org/InStock',
         'itemCondition' => 'https://schema.org/NewCondition',
-        'seller'        => ['@type' => 'Organization', 'name' => APP_NAME],
+        'seller'        => ['@type' => 'Organization', 'name' => $platform],
     ],
 ];
 if ($gallery) {
@@ -241,9 +242,46 @@ $breadcrumbSchema = [
     '@type'           => 'BreadcrumbList',
     'itemListElement' => [
         ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => site_url('index.php')],
-        ['@type' => 'ListItem', 'position' => 2, 'name' => $category !== '' ? $category : 'Deals', 'item' => site_url('index.php?category=' . rawurlencode($category))],
+        [
+            '@type' => 'ListItem',
+            'position' => 2,
+            'name' => $category !== '' ? $category : 'Deals',
+            'item' => (function_exists('seo_category_slug_map') && isset(seo_category_slug_map()[$category]))
+                ? site_url('deals/' . seo_category_slug_map()[$category])
+                : site_url('index.php'),
+        ],
         ['@type' => 'ListItem', 'position' => 3, 'name' => truncate_text($title, 80), 'item' => $productUrl],
     ],
+];
+
+$faqItems = [
+    [
+        'q' => 'Is ' . ($price > 0 ? inr($price) : 'this price') . ' the final price on ' . $platform . '?',
+        'a' => 'Safa Mart shows the same price as the ' . $platform . ' listing at the last check. Bank offers, coupons or delivery fees shown at checkout can change the final amount.',
+    ],
+    [
+        'q' => 'Where do I complete the purchase?',
+        'a' => 'Tap Buy Now to open the official ' . $platform . ' product page. Payment, delivery and returns are handled by ' . $platform . ', not by Safa Mart.',
+    ],
+    [
+        'q' => 'Is this product genuine?',
+        'a' => 'Yes. The listing links directly to the official product page on ' . $platform . '. Safa Mart only curates and tracks prices; it does not sell or ship the item.',
+    ],
+    [
+        'q' => 'How often is the price updated?',
+        'a' => 'Prices are re-checked regularly and the last verified date is shown near the price at the top of this page.',
+    ],
+];
+$faqSchema = [
+    '@context'   => 'https://schema.org',
+    '@type'      => 'FAQPage',
+    'mainEntity' => array_map(static function (array $item): array {
+        return [
+            '@type'          => 'Question',
+            'name'           => $item['q'],
+            'acceptedAnswer' => ['@type' => 'Answer', 'text' => $item['a']],
+        ];
+    }, $faqItems),
 ];
 ?>
 <!doctype html>
@@ -255,6 +293,13 @@ $breadcrumbSchema = [
     <title><?= e($pageTitle) ?></title>
     <meta name="description" content="<?= e($metaDescription) ?>">
     <link rel="canonical" href="<?= e($productUrl) ?>">
+    <?= seo_robots_meta(true) ?>
+    <?= seo_hreflang_links($productUrl) ?>
+    <?php foreach (seo_verification_meta() as $verificationTag): ?>
+        <?= $verificationTag ?>
+    <?php endforeach; ?>
+    <?= seo_site_schema() ?>
+    <?= seo_analytics_snippet() ?>
     <meta property="og:type" content="product">
     <meta property="og:site_name" content="<?= e(APP_NAME) ?>">
     <meta property="og:title" content="<?= e(truncate_text($title, 90)) ?>">
@@ -308,6 +353,7 @@ $breadcrumbSchema = [
     <script src="<?= e(asset_url('assets/js/app.js')) ?>" defer></script>
     <script type="application/ld+json"><?= json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
     <script type="application/ld+json"><?= json_encode($breadcrumbSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+<script type="application/ld+json"><?= json_encode($faqSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </head>
 <body class="product-page">
 <div class="top-strip product-top-strip">
@@ -643,6 +689,26 @@ $breadcrumbSchema = [
         </section>
     <?php endif; ?>
 
+    <section class="product-faq" aria-labelledby="faqHeading">
+        <h2 id="faqHeading">Questions before you buy</h2>
+        <details class="faq-item">
+            <summary><?= e($faqItems[0]['q']) ?></summary>
+            <p><?= e($faqItems[0]['a']) ?></p>
+        </details>
+        <details class="faq-item">
+            <summary><?= e($faqItems[1]['q']) ?></summary>
+            <p><?= e($faqItems[1]['a']) ?></p>
+        </details>
+        <details class="faq-item">
+            <summary><?= e($faqItems[2]['q']) ?></summary>
+            <p><?= e($faqItems[2]['a']) ?></p>
+        </details>
+        <details class="faq-item">
+            <summary><?= e($faqItems[3]['q']) ?></summary>
+            <p><?= e($faqItems[3]['a']) ?></p>
+        </details>
+    </section>
+
     <?php if ($related): ?>
         <section class="related-section" aria-labelledby="relatedHeading">
             <div class="section-heading">
@@ -686,6 +752,7 @@ $breadcrumbSchema = [
 </footer>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<?php require __DIR__ . '/includes/telegram_button.php'; ?>
 <?php require __DIR__ . '/includes/telegram_popup.php'; ?>
 </body>
 </html>

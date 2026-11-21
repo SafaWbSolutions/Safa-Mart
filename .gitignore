@@ -26,3 +26,5 @@ Thumbs.db
 .idea/
 .vscode/
 uploads/featured.json
+uploads/sitemap-cache.xml
+uploads/product-feed-cache.xml

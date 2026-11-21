@@ -178,7 +178,20 @@ safa_define('AD_SLOTS', safa_config_value('AD_SLOTS', [
     'home-bottom'    => ['html' => ''],
     'product-top'    => ['html' => ''],
     'product-bottom' => ['html' => ''],
+    'browse-top'     => ['html' => ''],
+    'browse-bottom'  => ['html' => ''],
 ]));
+
+// ---------------------------------------------------------------------------
+// SEO and analytics
+// ---------------------------------------------------------------------------
+// Search Console / Bing verification values, no HTML tags.
+safa_define('GOOGLE_SITE_VERIFICATION', trim((string) safa_config_value('GOOGLE_SITE_VERIFICATION', '')));
+safa_define('BING_SITE_VERIFICATION', trim((string) safa_config_value('BING_SITE_VERIFICATION', '')));
+// Optional GA4 measurement id, for example G-XXXXXXXXXX.
+safa_define('GOOGLE_ANALYTICS_ID', trim((string) safa_config_value('GOOGLE_ANALYTICS_ID', '')));
+safa_define('SEO_SITEMAP_CACHE_TTL', max(300, min(86400, (int) safa_config_value('SEO_SITEMAP_CACHE_TTL', 1800))));
+
 
 /**
  * Stores that are permanently rejected: the Telegram bot never processes them
@@ -227,3 +240,4 @@ require_once __DIR__ . '/includes/images.php';
 require_once __DIR__ . '/includes/supabase.php';
 require_once __DIR__ . '/includes/featured.php';
 require_once __DIR__ . '/includes/ads.php';
+require_once __DIR__ . '/includes/seo.php';

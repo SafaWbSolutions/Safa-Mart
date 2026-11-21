@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Internal endpoints and tooling
+Disallow: /api/
+Disallow: /automation/
+Disallow: /go.php
+
+# Filtered and search result URLs
+Disallow: /index.php?
+
+Sitemap: https://safamart.bis24.in/sitemap.xml
