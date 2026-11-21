@@ -82,6 +82,7 @@ safa_define('SUPABASE_SERVICE_KEY', trim((string) safa_config_value('SUPABASE_SE
 safa_define('SUPABASE_TABLE', trim((string) safa_config_value('SUPABASE_TABLE', 'products')));
 
 safa_define('TELEGRAM_BOT_TOKEN', trim((string) safa_config_value('TELEGRAM_BOT_TOKEN', '')));
+safa_define('TELEGRAM_CHANNEL_URL', trim((string) safa_config_value('TELEGRAM_CHANNEL_URL', 'https://t.me/lootlebuddy')));
 safa_define('TELEGRAM_WEBHOOK_SECRET', trim((string) safa_config_value('TELEGRAM_WEBHOOK_SECRET', '')));
 safa_define('TELEGRAM_ALLOWED_CHAT_IDS', trim((string) safa_config_value('TELEGRAM_ALLOWED_CHAT_IDS', '')));
 

@@ -781,6 +781,7 @@ class Config:
     per_feed: int
     stock_check: bool
     stock_limit: int
+    min_discount: int
     dry_run: bool
 
     @classmethod
@@ -804,6 +805,11 @@ class Config:
         )
         skip_stock = args.skip_stock_check or env("SKIP_STOCK_CHECK").lower() in ("1", "true", "yes", "on")
         stock_limit = env_int("STOCK_CHECK_LIMIT", 200)
+        min_discount = (
+            args.min_discount
+            if getattr(args, "min_discount", None) is not None
+            else env_int("MIN_DISCOUNT_PERCENT", 40)
+        )
 
         earnkaro_url = env("EARNKARO_API_URL", DEFAULT_EARNKARO_API_URL).strip()
         if not earnkaro_url or "api.earnkaro.com" in earnkaro_url:
@@ -822,6 +828,7 @@ class Config:
             per_feed=max(1, min(100, per_feed)),
             stock_check=not skip_stock,
             stock_limit=max(0, min(1000, stock_limit)),
+            min_discount=max(0, min(95, min_discount)),
             dry_run=bool(args.dry_run),
         )
 
@@ -858,6 +865,7 @@ class SupabaseClient:
             "Accept": "application/json",
             "User-Agent": "SafaMartSync/1.0",
         })
+        self._price_cache: dict[str, Optional[float]] = {}
 
     def _request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         try:
@@ -894,6 +902,32 @@ class SupabaseClient:
                 saved += len(chunk)
             LOGGER.info("Upserted batch of %d products", len(chunk))
         return saved
+
+    def existing_price(self, original_url: str) -> Optional[float]:
+        """Price already stored for this product, or None when it is new."""
+        if not original_url:
+            return None
+        if original_url in self._price_cache:
+            return self._price_cache[original_url]
+        query = urlencode({
+            "select": "price",
+            "original_url": f"eq.{original_url}",
+            "limit": "1",
+        })
+        try:
+            response = self._request("GET", f"{self.table}?{query}")
+            data = response.json()
+        except (ScrapeError, ValueError):
+            self._price_cache[original_url] = None
+            return None
+        price: Optional[float] = None
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            try:
+                price = float(data[0].get("price") or 0)
+            except (TypeError, ValueError):
+                price = None
+        self._price_cache[original_url] = price
+        return price
 
     def fetch_active(self, limit: int) -> list[dict[str, Any]]:
         if limit <= 0:
@@ -1367,11 +1401,31 @@ def check_existing_products(
     return len(rows), len(broken), price_updates
 
 
+def deal_decision(
+    client: Optional["SupabaseClient"],
+    config: Config,
+    payload: dict[str, Any],
+) -> str:
+    """Return new / drop / skip_discount / skip_no_drop for a scraped product."""
+    discount = int(payload.get("discount_percent") or 0)
+    price = float(payload.get("price") or 0)
+    existing: Optional[float] = None
+    if client is not None:
+        existing = client.existing_price(str(payload.get("original_url") or ""))
+
+    if existing is None:
+        return "new" if discount >= config.min_discount else "skip_discount"
+    if price > 0 and existing > 0 and price < existing - 0.5:
+        return "drop"
+    return "skip_no_drop"
+
+
 def run_sync(config: Config, args: argparse.Namespace) -> int:
     session = build_session()
     client: Optional[SupabaseClient] = None
     total_saved = 0
     collected: dict[str, dict[str, Any]] = {}
+    deal_stats = {"new": 0, "drops": 0, "low_discount": 0, "no_drop": 0}
 
     try:
         if not config.dry_run:
@@ -1411,12 +1465,35 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
                     else:
                         payload = build_product_payload(config, session, link, hint)
                         if payload:
+                            decision = deal_decision(client, config, payload)
+                            if decision == "skip_discount":
+                                deal_stats["low_discount"] += 1
+                                LOGGER.info(
+                                    "Skipped by deal filter: %s (only %s%% off, needs %s%%)",
+                                    truncate(payload["title"], 60),
+                                    payload["discount_percent"],
+                                    config.min_discount,
+                                )
+                                continue
+                            if decision == "skip_no_drop":
+                                deal_stats["no_drop"] += 1
+                                LOGGER.info(
+                                    "Skipped by deal filter: %s (no price drop, still ₹%s)",
+                                    truncate(payload["title"], 60),
+                                    payload["price"],
+                                )
+                                continue
+                            if decision == "drop":
+                                deal_stats["drops"] += 1
+                            else:
+                                deal_stats["new"] += 1
                             collected[payload["original_url"]] = payload
                             LOGGER.info(
-                                "Prepared: %s | ₹%s | %s",
+                                "Prepared: %s | ₹%s | %s | %s%% off",
                                 truncate(payload["title"], 70),
                                 payload["price"],
                                 payload["category"],
+                                payload["discount_percent"],
                             )
                 except ScrapeError as error:
                     LOGGER.warning("Skipped %s: %s", link, error)
@@ -1430,7 +1507,14 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
             if client is not None and collected:
                 total_saved = client.upsert(list(collected.values()))
             LOGGER.info("Upserted %d product(s) out of %d prepared", total_saved, len(collected))
-
+            LOGGER.info(
+                "Deal filter: %d new best deals, %d price drops | Skipped by deal filter: %d low discount (<%d%%), %d no price drop",
+                deal_stats["new"],
+                deal_stats["drops"],
+                deal_stats["low_discount"],
+                config.min_discount,
+                deal_stats["no_drop"],
+            )
             if config.stock_check and client is not None:
                 check_existing_products(config, client, session)
 
@@ -1450,6 +1534,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Scrape and log only; no writes or uploads")
     parser.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")
     parser.add_argument("--feeds", nargs="+", default=None, help="Override FEED_URLS")
+    parser.add_argument("--min-discount", type=int, default=None, help="Minimum discount %% for new products")
     return parser.parse_args(argv)
 
 
@@ -1466,8 +1551,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
 
     LOGGER.info("Starting Safa Mart sync (%s mode)", "dry-run" if config.dry_run else "live")
-    LOGGER.info("Feeds: %d | max products: %d | stock check: %s",
-                len(config.feeds), config.max_products, config.stock_check)
+    LOGGER.info("Feeds: %d | max products: %d | stock check: %s | min discount: %d%%",
+                len(config.feeds), config.max_products, config.stock_check, config.min_discount)
     try:
         return run_sync(config, args)
     except KeyboardInterrupt:

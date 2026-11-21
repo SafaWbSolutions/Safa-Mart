@@ -15,6 +15,10 @@ on:
         required: false
         type: boolean
         default: true
+      min_discount:
+        description: "Minimum discount percent for new products (best-deal filter)"
+        required: false
+        default: "40"
 
 permissions:
   contents: read
@@ -45,6 +49,7 @@ jobs:
       PRODUCTS_PER_FEED: "10"
       STOCK_CHECK_LIMIT: "50"
       SKIP_STOCK_CHECK: ${{ github.event.inputs.skip_stock_check || 'true' }}
+      MIN_DISCOUNT_PERCENT: ${{ github.event.inputs.min_discount || '40' }}
 
     steps:
       - name: Checkout repository

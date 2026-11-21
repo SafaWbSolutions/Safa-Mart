@@ -343,6 +343,7 @@ $breadcrumbSchema = [
 </footer>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<?php require __DIR__ . '/includes/telegram_popup.php'; ?>
 </body>
 </html>
 <?php
