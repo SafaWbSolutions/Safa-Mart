@@ -419,6 +419,19 @@ function is_blocked_url(string $url): bool
 /**
  * @param array<string,mixed> $product
  */
+function product_is_affiliated(array $product): bool
+{
+    $affiliateUrl = trim((string) ($product['affiliate_url'] ?? ''));
+    $originalUrl = trim((string) ($product['original_url'] ?? ''));
+    if ($affiliateUrl === '' || $affiliateUrl === $originalUrl) {
+        return false;
+    }
+    return is_affiliate_url($affiliateUrl);
+}
+
+/**
+ * @param array<string,mixed> $product
+ */
 function is_blocked_product(array $product): bool
 {
     if (is_blocked_platform((string) ($product['source_platform'] ?? ''))) {
@@ -433,6 +446,11 @@ function is_blocked_product(array $product): bool
     // single product (e.g. a Myntra brand page with the Myntra logo image).
     $originalUrl = trim((string) ($product['original_url'] ?? ''));
     if ($originalUrl !== '' && !is_product_page_url($originalUrl)) {
+        return true;
+    }
+    // Bina EarnKaro tracking link wale products par click hone se commission
+    // nahi milta, isliye unhe automatically chhupa dete hain.
+    if (HIDE_UNAFFILIATED_PRODUCTS && !product_is_affiliated($product)) {
         return true;
     }
     return false;

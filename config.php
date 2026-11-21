@@ -131,6 +131,11 @@ safa_define('IMAGE_MAX_DIMENSION', max(600, min(2400, (int) safa_config_value('I
 safa_define('WEBP_QUALITY', max(55, min(95, (int) safa_config_value('WEBP_QUALITY', 80))));
 
 safa_define('PRODUCTS_PER_PAGE', max(8, min(60, (int) safa_config_value('PRODUCTS_PER_PAGE', 24))));
+// Storefront par sirf wahi products dikhayein jinke EarnKaro tracking link
+// ban chuke hain. Isse bina commission wale/purane products automatically
+// chhup jate hain — koi manual command nahi chahiye. Band karna ho to
+// config.local.php me 'HIDE_UNAFFILIATED_PRODUCTS' => false kar do.
+safa_define('HIDE_UNAFFILIATED_PRODUCTS', safa_bool(safa_config_value('HIDE_UNAFFILIATED_PRODUCTS', true)));
 safa_define('PRODUCT_CATEGORIES', ['Fashion', 'Electronics', 'Home & Kitchen', 'Beauty', 'Footwear', 'Accessories']);
 safa_define('PLATFORM_FILTERS', ['Flipkart', 'Myntra', 'Amazon']);
 

@@ -103,6 +103,9 @@ return [
 
     'UPLOAD_API_SECRET'        => 'a-different-long-random-upload-secret',
     'PRODUCTS_PER_PAGE'        => 24,
+    // Storefront par sirf EarnKaro tracking link wale products dikhayein.
+    // false karne par bina commission wale products bhi dikhenge.
+    'HIDE_UNAFFILIATED_PRODUCTS' => true,
 ];
 ```
 
