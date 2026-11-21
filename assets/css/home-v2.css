@@ -762,6 +762,104 @@
 .drop-meta strong { color: #067647; font-weight: 850; }
 .drop-meta s { color: #98a2b3; }
 
+/* ---------- Colourful SEO link chips ---------- */
+a.category-chip {
+    transition: transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
+}
+
+a.category-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(17, 24, 39, .09);
+}
+
+.browse-link-grid a.category-chip::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .6;
+}
+
+/* Categories */
+a.category-chip[href*="/deals/fashion"] {
+    background: #fff0f6; border-color: #ffd0e2; color: #b3124a;
+}
+a.category-chip[href*="/deals/electronics"] {
+    background: #eef4ff; border-color: #d3e0ff; color: #1d4ed8;
+}
+a.category-chip[href*="/deals/home-kitchen"] {
+    background: #fff6ea; border-color: #ffe0b8; color: #b45309;
+}
+a.category-chip[href*="/deals/beauty"] {
+    background: #faf0ff; border-color: #ecd0ff; color: #7e22ce;
+}
+a.category-chip[href*="/deals/footwear"] {
+    background: #ecfdf6; border-color: #c8f3e0; color: #047857;
+}
+a.category-chip[href*="/deals/accessories"] {
+    background: #fffbea; border-color: #ffeaa0; color: #a16207;
+}
+
+/* Stores */
+a.category-chip[href*="/store/flipkart"] {
+    background: #eef4ff; border-color: #cfe0ff; color: #1d4ed8;
+}
+a.category-chip[href*="/store/myntra"] {
+    background: #fff0f6; border-color: #ffd0e2; color: #c2185b;
+}
+a.category-chip[href*="/store/amazon"] {
+    background: #fff7e6; border-color: #ffe1a8; color: #92400e;
+}
+a.category-chip[href*="/store/ajio"] {
+    background: #eef2ff; border-color: #d6dcff; color: #3730a3;
+}
+a.category-chip[href*="/store/shopsy"] {
+    background: #fff1e8; border-color: #ffd9c2; color: #c2410c;
+}
+a.category-chip[href*="/store/digihaat"] {
+    background: #f5f0ff; border-color: #e4d6ff; color: #6d28d9;
+}
+
+/* Budget */
+a.category-chip[href*="/deals/under-499"] {
+    background: #e9f8ef; border-color: #c6f0d8; color: #067647;
+}
+a.category-chip[href*="/deals/under-999"] {
+    background: #e6f7f4; border-color: #c2ece3; color: #0f766e;
+}
+a.category-chip[href*="/deals/under-1999"] {
+    background: #eefbe7; border-color: #d5f2bf; color: #3f6212;
+}
+
+/* Guides, sale trackers, price drops */
+a.category-chip[href*="/guides/"] {
+    background: linear-gradient(135deg, #f7f3ff, #ede7ff);
+    border-color: #ddd0ff;
+    color: #5b21b6;
+}
+a.category-chip[href*="/sale/"],
+a.category-chip[href*="big-billion-days"],
+a.category-chip[href*="end-of-reason-sale"],
+a.category-chip[href*="great-indian-festival"],
+a.category-chip[href*="ajio-big-bold-sale"] {
+    background: linear-gradient(135deg, #fff7ed, #ffe8e0);
+    border-color: #ffd4c4;
+    color: #c2410c;
+}
+a.category-chip[href*="price-drops"] {
+    background: linear-gradient(135deg, #fff1f6, #ffe4ec);
+    border-color: #fbcfe0;
+    color: #be123c;
+    font-weight: 800;
+}
+a.category-chip[href*="price-drops"]::before { display: none; }
+
+a.category-chip[href*="/guides/"]:hover { background: linear-gradient(135deg, #efe9ff, #e3d9ff); }
+a.category-chip[href*="/sale/"]:hover { background: linear-gradient(135deg, #ffedd5, #ffdccf); }
+a.category-chip[href*="price-drops"]:hover { background: linear-gradient(135deg, #ffe4ed, #ffd6e4); }
+
 /* ---------- Offer rails (Flipkart-style strip) ---------- */
 .deal-rail-section {
     position: relative;
