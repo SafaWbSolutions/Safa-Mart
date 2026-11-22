@@ -166,14 +166,28 @@ safa_define('HERO_CAROUSEL_ENABLED', safa_bool(safa_config_value('HERO_CAROUSEL_
 safa_define('HERO_SLIDE_COUNT', max(2, min(8, (int) safa_config_value('HERO_SLIDE_COUNT', 5))));
 safa_define('HERO_AUTOPLAY_MS', max(3000, min(15000, (int) safa_config_value('HERO_AUTOPLAY_MS', 5500))));
 
+// ---------------------------------------------------------------------------
+// Smart Deal Score — weights must sum to 1.0 (normalised internally).
+// All inputs are capped to sensible ranges before weighting.
+// ---------------------------------------------------------------------------
+safa_define('DEAL_SCORE_W_DISCOUNT', max(0.0, min(1.0, (float) safa_config_value('DEAL_SCORE_W_DISCOUNT', 0.40))));
+safa_define('DEAL_SCORE_W_RATING',   max(0.0, min(1.0, (float) safa_config_value('DEAL_SCORE_W_RATING',   0.20))));
+safa_define('DEAL_SCORE_W_CLICKS',   max(0.0, min(1.0, (float) safa_config_value('DEAL_SCORE_W_CLICKS',   0.20))));
+safa_define('DEAL_SCORE_W_DROP',     max(0.0, min(1.0, (float) safa_config_value('DEAL_SCORE_W_DROP',     0.15))));
+safa_define('DEAL_SCORE_W_PLATFORM', max(0.0, min(1.0, (float) safa_config_value('DEAL_SCORE_W_PLATFORM', 0.05))));
+
+// Click heat window (days) — how recent clicks count for score.
+safa_define('DEAL_SCORE_CLICK_WINDOW_DAYS', max(1, min(30, (int) safa_config_value('DEAL_SCORE_CLICK_WINDOW_DAYS', 7))));
+
 // Default product order on the home grid. One of: newest, price_asc,
-// price_desc, discount_desc, rating_desc.
+// price_desc, discount_desc, rating_desc, deal_score.
 $safaHomeOrder = trim((string) safa_config_value('HOME_PRODUCT_ORDER', 'newest'));
-if (!in_array($safaHomeOrder, ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rating_desc'], true)) {
+$allowedOrders = ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rating_desc', 'deal_score'];
+if (!in_array($safaHomeOrder, $allowedOrders, true)) {
     $safaHomeOrder = 'newest';
 }
 safa_define('HOME_PRODUCT_ORDER', $safaHomeOrder);
-unset($safaHomeOrder);
+unset($safaHomeOrder, $allowedOrders);
 
 // ---------------------------------------------------------------------------
 // Ads

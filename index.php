@@ -14,7 +14,7 @@ if (!in_array($platform, PLATFORM_FILTERS, true)) {
 }
 
 $sort = trim((string) ($_GET['sort'] ?? ''));
-if (!in_array($sort, ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rating_desc'], true)) {
+if (!in_array($sort, ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rating_desc', 'deal_score'], true)) {
     $sort = '';
 }
 $minPrice = max(0.0, (float) ($_GET['min_price'] ?? 0));
@@ -97,6 +97,16 @@ if (!$hasFilters && $products) {
         $products = $mixedHome;
         $homeMixed = true;
     }
+}
+
+// Deal score sort: compute score for each product and sort descending.
+// Only applies when user explicitly chose 'deal_score' and we're not on home mixed view.
+if ($sort === 'deal_score' && $products && !$homeMixed) {
+    usort($products, static function (array $a, array $b): int {
+        $scoreA = compute_deal_score($a);
+        $scoreB = compute_deal_score($b);
+        return $scoreB <=> $scoreA;
+    });
 }
 $hasMore = $homeMixed ? false : count($products) >= PRODUCTS_PER_PAGE;
 
@@ -408,6 +418,7 @@ if (SUPABASE_URL !== '') {
                     <option value="price_desc" <?= $uiSort === 'price_desc' ? 'selected' : '' ?>>Price: high to low</option>
                     <option value="discount_desc" <?= $uiSort === 'discount_desc' ? 'selected' : '' ?>>Biggest discount</option>
                     <option value="rating_desc" <?= $uiSort === 'rating_desc' ? 'selected' : '' ?>>Top rated</option>
+                    <option value="deal_score" <?= $uiSort === 'deal_score' ? 'selected' : '' ?>>Smart Deal Score</option>
                 </select>
             </label>
 

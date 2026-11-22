@@ -227,8 +227,92 @@ function product_order_clause(string $sort): string
         'price_desc'    => 'price.desc',
         'discount_desc' => 'discount_percent.desc',
         'rating_desc'   => 'rating.desc',
+        'deal_score'    => 'discount_percent.desc', // fallback; real score computed in PHP
         default         => 'created_at.desc',
     };
+}
+
+/**
+ * Normalise a value to 0..1 with caps.
+ */
+function deal_score_norm(float $value, float $min, float $max): float
+{
+    if ($max <= $min) {
+        return 0.0;
+    }
+    $v = ($value - $min) / ($max - $min);
+    return max(0.0, min(1.0, $v));
+}
+
+/**
+ * Compute Smart Deal Score for a product (0..1, higher = better deal).
+ *
+ * Components (weights from config, sum to 1.0):
+ *  - discount_pct_norm: discount% capped at 90 → 0..1
+ *  - rating_norm: rating 0..5 → 0..1
+ *  - click_heat_norm: clicks in last N days / max clicks in window → 0..1
+ *  - drop_bonus: 1 if recent price drop > 5%, else 0
+ *  - platform_trust: Myntra/Ajio=1, Shopsy=0.7, DigiHaat=0.6, Flipkart=0.5, Amazon=0.5, other=0.3
+ *
+ * @param array<string,mixed> $product  Product row (needs discount_percent, rating, clicks, source_platform, price_history optional)
+ * @return float  Score 0..1
+ */
+function compute_deal_score(array $product): float
+{
+    $discount = max(0, min(90, (int) ($product['discount_percent'] ?? 0)));
+    $rating   = max(0.0, min(5.0, (float) ($product['rating'] ?? 0)));
+    $clicks   = max(0, (int) ($product['clicks'] ?? 0));
+    $platform = strtolower(trim((string) ($product['source_platform'] ?? '')));
+    $price    = (float) ($product['price'] ?? 0);
+
+    // Normalised components
+    $discountNorm = deal_score_norm($discount, 0, 90);
+    $ratingNorm   = deal_score_norm($rating, 0, 5);
+
+    // Click heat: need window max. We approximate with a capped log scale
+    // so a few clicks matter but huge numbers don't dominate.
+    $clickWindow = defined('DEAL_SCORE_CLICK_WINDOW_DAYS') ? DEAL_SCORE_CLICK_WINDOW_DAYS : 7;
+    // Since we don't have per-window clicks in the row, use total clicks with log.
+    // 0 clicks → 0, 10 clicks → ~0.5, 100 clicks → ~0.8, 1000+ → ~1.0
+    $clickHeatNorm = $clicks > 0 ? min(1.0, log($clicks + 1) / log(101)) : 0.0;
+
+    // Price drop bonus: 1 if we have price_history and latest drop > 5%
+    $dropBonus = 0.0;
+    if (function_exists('price_history_available') && price_history_available() && function_exists('fetch_price_history')) {
+        $history = fetch_price_history((string) ($product['slug'] ?? ''), 2);
+        if (count($history) >= 2) {
+            $current = $history[0]['price'] ?? 0;
+            $previous = $history[1]['price'] ?? 0;
+            if ($previous > 0 && $current > 0 && $current < $previous * 0.95) {
+                $dropBonus = 1.0;
+            }
+        }
+    }
+
+    // Platform trust score
+    $platformTrust = match ($platform) {
+        'myntra', 'ajio' => 1.0,
+        'shopsy'         => 0.7,
+        'digihaat'       => 0.6,
+        'flipkart'       => 0.5,
+        'amazon'         => 0.5,
+        default          => 0.3,
+    };
+
+    // Weights from config (already validated to sum ~1.0)
+    $wDiscount = defined('DEAL_SCORE_W_DISCOUNT') ? DEAL_SCORE_W_DISCOUNT : 0.40;
+    $wRating   = defined('DEAL_SCORE_W_RATING')   ? DEAL_SCORE_W_RATING   : 0.20;
+    $wClicks   = defined('DEAL_SCORE_W_CLICKS')   ? DEAL_SCORE_W_CLICKS   : 0.20;
+    $wDrop     = defined('DEAL_SCORE_W_DROP')     ? DEAL_SCORE_W_DROP     : 0.15;
+    $wPlatform = defined('DEAL_SCORE_W_PLATFORM') ? DEAL_SCORE_W_PLATFORM : 0.05;
+
+    $score = $wDiscount * $discountNorm
+           + $wRating   * $ratingNorm
+           + $wClicks   * $clickHeatNorm
+           + $wDrop     * $dropBonus
+           + $wPlatform * $platformTrust;
+
+    return max(0.0, min(1.0, $score));
 }
 
 function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PER_PAGE): array
