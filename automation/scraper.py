@@ -289,6 +289,11 @@ CATEGORY_FEEDS = [
     "https://www.shopsy.in/search?q=perfume",
     "https://www.shopsy.in/search?q=shoes",
     "https://www.shopsy.in/search?q=backpack",
+    # Categories that were missing from the catalogue entirely.
+    "https://www.shopsy.in/search?q=saree",
+    "https://www.shopsy.in/search?q=watch",
+    "https://www.shopsy.in/search?q=jewellery",
+    "https://www.shopsy.in/search?q=mixer%20grinder",
 ]
 IMAGE_MAX_BYTES = 10 * 1024 * 1024
 PAGE_MAX_BYTES = 4 * 1024 * 1024
