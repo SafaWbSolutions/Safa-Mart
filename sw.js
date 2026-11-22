@@ -3,11 +3,12 @@
  * - Fast repeat visits: static assets are served from cache, pages use
  *   network-first so prices are never stale for long.
  * - Offline page instead of the browser dinosaur.
- * - Web Push: the push message is a tickle (no encrypted payload), the worker
- *   fetches fresh deal data from /api/alerts.php and shows the notification.
+ * - Web Push: a real encrypted payload (title/body/url/image) is shown
+ *   directly. Payload-less tickle pushes still work: the worker fetches
+ *   /api/alerts.php and shows the newest deal.
  */
 
-const VERSION = 'safa-v4';
+const VERSION = 'safa-v5';
 const STATIC_CACHE = VERSION + '-static';
 const PAGE_CACHE = VERSION + '-pages';
 const OFFLINE_URL = '/offline.php';
@@ -151,9 +152,25 @@ async function fetchAlert() {
 }
 
 self.addEventListener('push', (event) => {
+    let payload = null;
+    if (event.data) {
+        try {
+            payload = event.data.json();
+        } catch (error) {
+            try {
+                const text = event.data.text();
+                if (text) {
+                    payload = { body: text };
+                }
+            } catch (textError) {
+                payload = null;
+            }
+        }
+    }
+
     event.waitUntil(
-        fetchAlert()
-            .then((payload) => showDealNotification(payload))
+        (payload ? Promise.resolve(payload) : fetchAlert())
+            .then((data) => showDealNotification(data))
             .catch(() => showDealNotification(null))
     );
 });

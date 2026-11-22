@@ -2,10 +2,11 @@
 /**
  * Web Push (VAPID) helpers.
  *
- * Push messages are sent as a "tickle" with no encrypted payload. The service
- * worker wakes up, calls /api/alerts.php and shows the newest deal. That keeps
- * this file dependency-free (no Composer, no GMP) and still works on Chrome,
- * Edge, Firefox and Safari 16.4+.
+ * Notifications carry a real encrypted payload (RFC 8291, aes128gcm) so the
+ * phone can show the deal even when it never gets a chance to fetch
+ * /api/alerts.php. Empty "tickle" pushes are still supported as a fallback:
+ * if encryption is unavailable the worker wakes up and fetches the newest
+ * deal itself. Everything is pure PHP + OpenSSL (no Composer, no GMP).
  *
  * Private data (VAPID key, subscriptions) lives in /storage which is denied by
  * .htaccess and never committed.
@@ -39,6 +40,125 @@ function push_b64url_decode(string $data): string
     }
     $decoded = base64_decode($data, true);
     return $decoded === false ? '' : $decoded;
+}
+
+/**
+ * Wrap a raw 65-byte uncompressed P-256 point in a PEM public key so OpenSSL
+ * can import it for ECDH.
+ */
+function push_public_key_pem(string $rawPublicKey): string
+{
+    if (strlen($rawPublicKey) !== 65 || ($rawPublicKey[0] ?? '') !== "\x04") {
+        return '';
+    }
+    $der = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200') . $rawPublicKey;
+    return "-----BEGIN PUBLIC KEY-----\n"
+        . chunk_split(base64_encode($der), 64, "\n")
+        . "-----END PUBLIC KEY-----\n";
+}
+
+/** Create a P-256 key pair, retrying with a system openssl.cnf when needed. */
+function push_openssl_key_new()
+{
+    $options = [
+        'private_key_type' => OPENSSL_KEYTYPE_EC,
+        'curve_name'       => 'prime256v1',
+    ];
+    $resource = @openssl_pkey_new($options);
+    if ($resource !== false) {
+        return $resource;
+    }
+    foreach ([
+        SAFA_ROOT . '/openssl.cnf',
+        '/etc/ssl/openssl.cnf',
+        '/usr/local/ssl/openssl.cnf',
+        '/etc/pki/tls/openssl.cnf',
+    ] as $configFile) {
+        if (!is_file($configFile)) {
+            continue;
+        }
+        $resource = @openssl_pkey_new($options + ['config' => $configFile]);
+        if ($resource !== false) {
+            return $resource;
+        }
+    }
+    return false;
+}
+
+/** Raw 65-byte public point for an OpenSSL EC key. */
+function push_openssl_public_point($resource): string
+{
+    $details = @openssl_pkey_get_details($resource);
+    if (!is_array($details) || !isset($details['ec']['x'], $details['ec']['y'])) {
+        return '';
+    }
+    $x = str_pad(substr((string) $details['ec']['x'], -32), 32, "\0", STR_PAD_LEFT);
+    $y = str_pad(substr((string) $details['ec']['y'], -32), 32, "\0", STR_PAD_LEFT);
+    return "\x04" . $x . $y;
+}
+
+/**
+ * Encrypt a JSON payload for one browser subscription using RFC 8291
+ * aes128gcm. Returns the raw request body, or '' when the keys are unusable.
+ */
+function push_encrypt_payload(string $p256dh, string $auth, string $plaintext): string
+{
+    if ($plaintext === '' || strlen($plaintext) > 3500) {
+        return '';
+    }
+    if (!function_exists('openssl_pkey_derive') || !function_exists('hash_hkdf')) {
+        return '';
+    }
+
+    $userPublic = push_b64url_decode($p256dh);
+    $authSecret = push_b64url_decode($auth);
+    if (strlen($userPublic) !== 65 || ($userPublic[0] ?? '') !== "\x04" || strlen($authSecret) !== 16) {
+        return '';
+    }
+
+    $peer = @openssl_pkey_get_public(push_public_key_pem($userPublic));
+    if ($peer === false) {
+        return '';
+    }
+    $local = push_openssl_key_new();
+    if ($local === false) {
+        return '';
+    }
+    $applicationPublic = push_openssl_public_point($local);
+    $shared = @openssl_pkey_derive($peer, $local, 32);
+    if (!is_string($shared) || strlen($shared) !== 32 || $applicationPublic === '') {
+        return '';
+    }
+
+    $salt = random_bytes(16);
+    // RFC 8291: IKM = HKDF(auth_secret, ecdh_secret, "WebPush: info" | ua_pub | as_pub)
+    $ikm = hash_hkdf(
+        'sha256',
+        $shared,
+        32,
+        "WebPush: info\x00" . $userPublic . $applicationPublic,
+        $authSecret
+    );
+    $contentKey = hash_hkdf('sha256', $ikm, 16, "Content-Encoding: aes128gcm\x00", $salt);
+    $nonce = hash_hkdf('sha256', $ikm, 12, "Content-Encoding: nonce\x00", $salt);
+
+    $tag = '';
+    $ciphertext = @openssl_encrypt(
+        $plaintext . "\x02",
+        'aes-128-gcm',
+        $contentKey,
+        OPENSSL_RAW_DATA,
+        $nonce,
+        $tag,
+        '',
+        16
+    );
+    if (!is_string($ciphertext) || strlen($tag) !== 16) {
+        return '';
+    }
+
+    // Header: salt (16) | record size (4, big endian) | key id length (1) | key id
+    return $salt . pack('N', 4096) . chr(strlen($applicationPublic)) . $applicationPublic . $ciphertext . $tag;
 }
 
 /**
@@ -450,30 +570,135 @@ function push_stats(): array
 }
 
 /**
- * Send one tickle push.
+ * Build the notification object for a product. Only real values are used:
+ * no invented urgency and no fake discounts.
  *
- * @return array{ok:bool,status:int,gone:bool,error:string}
+ * @param array<string,mixed> $product
+ * @return array{title:string,body:string,url:string,image:string,tag:string}
  */
-function push_send_one(string $endpoint): array
+function push_payload_for_product(array $product): array
+{
+    $name = truncate_text(clean_text((string) ($product['title'] ?? '')), 80);
+    if ($name === '') {
+        $name = 'Fresh deal on Safa Mart';
+    }
+    $price = (float) ($product['price'] ?? 0);
+    $mrp = (float) ($product['mrp'] ?? 0);
+    $discount = (int) ($product['discount_percent'] ?? 0);
+    if ($discount <= 0 && $price > 0 && $mrp > $price) {
+        $discount = (int) round((($mrp - $price) / $mrp) * 100);
+    }
+
+    $pieces = [];
+    if ($price > 0) {
+        $pieces[] = 'Now ₹' . inr_plain($price);
+    }
+    if ($mrp > $price && $mrp > 0) {
+        $pieces[] = 'MRP ₹' . inr_plain($mrp);
+    }
+    if ($discount > 0) {
+        $pieces[] = $discount . '% off';
+    }
+    $body = $pieces
+        ? implode(' · ', $pieces)
+        : 'Tap to see the live price on the store page.';
+
+    $image = trim((string) ($product['thumbnail_url'] ?? ''));
+    if ($image !== '' && !preg_match('#^https?://#i', $image)) {
+        $image = site_url($image);
+    }
+
+    $slug = trim((string) ($product['slug'] ?? ''));
+    $url = $slug !== ''
+        ? site_url('product.php?slug=' . rawurlencode($slug))
+        : site_url('index.php');
+
+    $title = $discount > 0
+        ? $discount . '% OFF · ' . $name
+        : 'New deal · ' . $name;
+
+    return [
+        'title' => truncate_text($title, 120),
+        'body'  => truncate_text($body, 180),
+        'url'   => $url,
+        'image' => $image,
+        'tag'   => 'safa-deal-' . ($slug !== '' ? substr(sha1($slug), 0, 10) : 'new'),
+    ];
+}
+
+/** Newest product from the catalogue, used for test pushes and broadcasts. */
+function push_latest_product(): ?array
+{
+    if (!function_exists('fetch_storefront_products') || !supabase_is_configured()) {
+        return null;
+    }
+    $products = fetch_storefront_products(['sort' => 'newest'], 1);
+    $first = $products[0] ?? null;
+    return is_array($first) ? $first : null;
+}
+
+/**
+ * Fallback notification when no specific product is available.
+ *
+ * @param array<string,mixed>|null $product
+ * @return array{title:string,body:string,url:string,image:string,tag:string}
+ */
+function push_default_payload(?array $product = null): array
+{
+    $product = $product ?? push_latest_product();
+    if (is_array($product)) {
+        return push_payload_for_product($product);
+    }
+    return [
+        'title' => 'Safa Mart deals are live',
+        'body'  => 'Tap to open today\'s best hand-picked offers.',
+        'url'   => site_url('index.php'),
+        'image' => site_url('assets/icons/icon-512.png'),
+        'tag'   => 'safa-deal',
+    ];
+}
+
+/**
+ * Send one push. With a subscription key pair and a payload the message is
+ * encrypted (RFC 8291); otherwise it falls back to a payload-less tickle.
+ *
+ * @param array<string,mixed> $payload
+ * @return array{ok:bool,status:int,gone:bool,error:string,encrypted:bool}
+ */
+function push_send_one(string $endpoint, string $p256dh = '', string $auth = '', array $payload = []): array
 {
     $token = push_vapid_token($endpoint);
     $publicKey = push_public_key();
     if ($token === '' || $publicKey === '') {
-        return ['ok' => false, 'status' => 0, 'gone' => false, 'error' => 'VAPID signing failed.'];
+        return ['ok' => false, 'status' => 0, 'gone' => false, 'error' => 'VAPID signing failed.', 'encrypted' => false];
+    }
+
+    $body = '';
+    if ($payload && $p256dh !== '' && $auth !== '') {
+        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if (is_string($json) && $json !== '') {
+            $body = push_encrypt_payload($p256dh, $auth, $json);
+        }
+    }
+
+    $headers = [
+        'Authorization: vapid t=' . $token . ', k=' . $publicKey,
+        'TTL: 86400',
+        'Urgency: normal',
+        'Accept: */*',
+    ];
+    if ($body !== '') {
+        $headers[] = 'Content-Encoding: aes128gcm';
+        $headers[] = 'Content-Type: application/octet-stream';
     }
 
     $response = http_request($endpoint, [
         'method'    => 'POST',
-        'body'      => '',
+        'body'      => $body,
         'timeout'   => 8,
         'max_bytes' => 8192,
         'accept'    => '*/*',
-        'headers'   => [
-            'Authorization: vapid t=' . $token . ', k=' . $publicKey,
-            'TTL: 86400',
-            'Urgency: normal',
-            'Accept: */*',
-        ],
+        'headers'   => $headers,
     ]);
 
     $status = (int) ($response['status'] ?? 0);
@@ -482,17 +707,19 @@ function push_send_one(string $endpoint): array
 
     if (!$ok) {
         app_log('info', 'Push delivery failed', [
-            'status' => $status,
-            'error'  => (string) ($response['error'] ?? ''),
-            'host'   => (string) parse_url($endpoint, PHP_URL_HOST),
+            'status'    => $status,
+            'error'     => (string) ($response['error'] ?? ''),
+            'encrypted' => $body !== '',
+            'host'      => (string) parse_url($endpoint, PHP_URL_HOST),
         ]);
     }
 
     return [
-        'ok'     => $ok,
-        'status' => $status,
-        'gone'   => $gone,
-        'error'  => (string) ($response['error'] ?? ''),
+        'ok'        => $ok,
+        'status'    => $status,
+        'gone'      => $gone,
+        'error'     => (string) ($response['error'] ?? ''),
+        'encrypted' => $body !== '',
     ];
 }
 
@@ -500,9 +727,10 @@ function push_send_one(string $endpoint): array
  * Fan out one notification to every subscriber (or only subscribers who chose
  * the given category). Returns counters for logging/Telegram.
  *
+ * @param array<string,mixed> $payload Notification object (title/body/url/image)
  * @return array{sent:int,failed:int,removed:int,skipped:int}
  */
-function push_broadcast(string $category = '', int $limit = 0): array
+function push_broadcast(string $category = '', int $limit = 0, array $payload = []): array
 {
     $result = ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => 0];
     if (!push_is_configured()) {
@@ -513,6 +741,8 @@ function push_broadcast(string $category = '', int $limit = 0): array
     if (!$subs) {
         return $result;
     }
+
+    $payload = $payload ?: push_default_payload();
 
     $max = $limit > 0 ? $limit : (defined('PUSH_MAX_PER_RUN') ? PUSH_MAX_PER_RUN : 150);
     $removedIds = [];
@@ -545,7 +775,12 @@ function push_broadcast(string $category = '', int $limit = 0): array
             continue;
         }
 
-        $send = push_send_one((string) $row['endpoint']);
+        $send = push_send_one(
+            (string) $row['endpoint'],
+            (string) ($row['p256dh'] ?? ''),
+            (string) ($row['auth'] ?? ''),
+            $payload
+        );
         if ($send['ok']) {
             $result['sent']++;
             $updates[$id] = ['fails' => 0, 'last_ok' => $now];
@@ -595,44 +830,48 @@ function push_broadcast(string $category = '', int $limit = 0): array
 
 /**
  * Turn freshly listed products into one push burst. Only the highest-discount
- * product is announced (the worker fetches its live price from the API).
+ * product is announced so users are not spammed, and its live price is sent
+ * inside the encrypted payload.
  *
  * @param list<array<string,mixed>> $products
+ * @return array{sent:int,failed:int,removed:int,skipped:int}
  */
 function push_announce_new_products(array $products): array
 {
+    $empty = ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => 0];
     if (!$products) {
-        return ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => 0];
+        return $empty;
     }
 
     // Avoid spamming: one burst per 10 minutes even if Telegram lists a lot.
     $throttleFile = push_storage_path('push-last-burst.txt');
     $last = is_file($throttleFile) ? (int) @file_get_contents($throttleFile) : 0;
     if ($last > 0 && time() - $last < 600) {
-        return ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => count($products)];
+        $empty['skipped'] = count($products);
+        return $empty;
     }
     @file_put_contents($throttleFile, (string) time(), LOCK_EX);
 
-    $bestCategory = '';
+    $best = null;
     $bestDiscount = -1;
+    $categories = [];
     foreach ($products as $product) {
+        if (!is_array($product)) {
+            continue;
+        }
+        $categories[(string) ($product['category'] ?? '')] = true;
         $discount = (int) ($product['discount_percent'] ?? 0);
         if ($discount > $bestDiscount) {
             $bestDiscount = $discount;
-            $bestCategory = (string) ($product['category'] ?? '');
+            $best = $product;
         }
+    }
+    if (!is_array($best)) {
+        return $empty;
     }
 
     // A mixed batch (no single category) goes to everybody.
-    if (count($products) > 1) {
-        $categories = [];
-        foreach ($products as $product) {
-            $categories[(string) ($product['category'] ?? '')] = true;
-        }
-        if (count($categories) > 1) {
-            $bestCategory = '';
-        }
-    }
+    $category = count($categories) === 1 ? (string) ($best['category'] ?? '') : '';
 
-    return push_broadcast($bestCategory);
+    return push_broadcast($category, 0, push_payload_for_product($best));
 }

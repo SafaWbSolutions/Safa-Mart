@@ -88,6 +88,31 @@ jobs:
       - name: Run product sync
         run: python automation/scraper.py
 
+      # Feed sync writes straight to Supabase, so it never triggered the
+      # Telegram-only push announce. Tell the site which products are new and
+      # let it send one encrypted Web Push burst to subscribers.
+      - name: Announce new deals by push
+        if: success()
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          UPLOAD_API_SECRET: ${{ secrets.UPLOAD_API_SECRET }}
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$UPLOAD_API_SECRET" ]; then
+            echo "Push announce skipped: SITE_URL or UPLOAD_API_SECRET is missing."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/safa-push.json -w "%{http_code}" -X POST \
+            -H "X-Api-Secret: $UPLOAD_API_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{}' \
+            "$SITE_URL/api/push.php?action=announce" || echo "000")
+          echo "Push announce HTTP $code"
+          if [ -f /tmp/safa-push.json ]; then
+            cat /tmp/safa-push.json || true
+          fi
+          # A push failure must never fail the sync run.
+          exit 0
+
       - name: Summarise sync result
         if: always()
         run: |

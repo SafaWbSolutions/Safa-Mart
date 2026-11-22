@@ -150,6 +150,13 @@ function seo_category_catalog(): array
             'intro' => 'Cookware, storage, cleaning and decor picks with honest discounts from Flipkart, Amazon, Shopsy and DigiHaat.',
             'long'  => 'Upgrading your kitchen or setting up a new home? These handpicked listings cover daily-use essentials without the inflated MRP games — every saving is calculated from the listed price.',
         ],
+        'Grocery' => [
+            'slug'  => 'grocery',
+            'title' => 'Grocery Deals – Dal, Spices, Snacks & Daily Essentials | Safa Mart',
+            'h1'    => 'Grocery deals on everyday essentials',
+            'intro' => 'Dal, rice, atta, spices, tea, snacks and household staples with live prices from DigiHaat and other trusted stores.',
+            'long'  => 'Daily essentials are where small savings add up. Every grocery card shows the pack size, current price and listed MRP so you can restock without comparing five different apps.',
+        ],
         'Beauty' => [
             'slug'  => 'beauty',
             'title' => 'Beauty Deals – Skincare, Makeup & Haircare Offers | Safa Mart',

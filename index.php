@@ -78,11 +78,24 @@ if ($searchQuery !== '' && count($products) < PRODUCTS_PER_PAGE) {
 }
 
 $facets = fetch_filter_facets();
-$hasMore = count($products) >= PRODUCTS_PER_PAGE;
 $hasFilters = $searchQuery !== '' || $category !== '' || $platform !== ''
     || $sort !== '' || $minPrice > 0 || $maxPrice > 0
     || $minDiscount > 0 || $brand !== '' || $minRating > 0;
 $configMissing = missing_config(['SUPABASE_URL', 'SUPABASE_ANON_KEY']);
+
+// Home page: take the newest 120 products and let categories take turns so the
+// first screen feels like a real store instead of one long row of shirts.
+// Filtered pages and category tabs keep the normal newest-first order.
+$homeMixed = false;
+if (!$hasFilters && $products) {
+    $homePool = fetch_storefront_products(['sort' => $sort], 60);
+    $mixedHome = mix_products_by_category($homePool, PRODUCTS_PER_PAGE);
+    if ($mixedHome) {
+        $products = $mixedHome;
+        $homeMixed = true;
+    }
+}
+$hasMore = $homeMixed ? false : count($products) >= PRODUCTS_PER_PAGE;
 
 // Home page rails: curated spotlight + biggest-discount strip.
 $spotlightProducts = $hasFilters ? [] : fetch_spotlight_products(8);

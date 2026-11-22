@@ -464,22 +464,11 @@
             .then(function () {
                 return registration();
             })
-            .then(function (reg) {
-                return reg.pushManager.getSubscription().then(function (subscription) {
-                    subscribed = !!subscription && Notification.permission === 'granted';
-                    if (subscription && Notification.permission === 'granted') {
-                        var lastSync = 0;
-                        try {
-                            lastSync = Number(window.localStorage.getItem(SYNC_KEY)) || 0;
-                        } catch (error) {
-                            lastSync = 0;
-                        }
-                        if (Date.now() - lastSync > 21600000) {
-                            syncTopicsToServer(subscription).catch(function () { return undefined; });
-                        }
-                    }
-                    syncUI();
-                });
+            .then(function () {
+                // A browser subscription can outlive the server store (cache
+                // clear, host migration, restore from backup). Sync it on
+                // every visit so the phone never silently falls off the list.
+                return refreshSubscription();
             })
             .catch(function () {
                 setStatus('Service worker could not start. Alerts work best over HTTPS.', 'warn');
@@ -488,6 +477,56 @@
     } else {
         syncUI();
     }
+
+    function refreshSubscription() {
+        if (!pushSupported) {
+            return Promise.resolve(false);
+        }
+        return currentSubscription().then(function (subscription) {
+            if (!subscription || Notification.permission !== 'granted') {
+                subscribed = false;
+                syncUI();
+                return false;
+            }
+            subscribed = true;
+            syncUI();
+            return post('subscribe', {
+                subscription: subscription.toJSON(),
+                topics: topics
+            }).then(function (result) {
+                if (result && result.ok) {
+                    try {
+                        window.localStorage.setItem(SYNC_KEY, String(Date.now()));
+                    } catch (error) {
+                        /* ignore */
+                    }
+                }
+                syncUI();
+                return !!(result && result.ok);
+            }).catch(function () {
+                return false;
+            });
+        }).catch(function () {
+            return false;
+        });
+    }
+
+    // Android can rotate a push endpoint while the app stays installed. Pick
+    // that up when the user returns to the app (at most twice an hour).
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'visible' || !pushSupported) {
+            return;
+        }
+        var last = 0;
+        try {
+            last = Number(window.localStorage.getItem(SYNC_KEY)) || 0;
+        } catch (error) {
+            last = 0;
+        }
+        if (Date.now() - last > 1800000) {
+            refreshSubscription();
+        }
+    });
 
     syncUI();
 })();

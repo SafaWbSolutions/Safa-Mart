@@ -107,49 +107,189 @@ TRACKING_KEYS = re.compile(
     re.I,
 )
 
-CATEGORY_KEYWORDS = {
-    "Footwear": [
-        "shoe", "shoes", "sandal", "sandals", "sneaker", "sneakers", "footwear",
-        "boot", "boots", "heel", "heels", "slipper", "slippers", "loafer",
-        "loafers", "flip flop", "flip-flop", "crocs",
-    ],
-    "Beauty": [
-        "beauty", "makeup", "make-up", "cosmetic", "cosmetics", "skincare",
-        "skin care", "serum", "cream", "shampoo", "conditioner", "perfume",
-        "fragrance", "lipstick", "hair oil", "haircare", "grooming", "nail",
-        "eyeliner", "kajal", "sunscreen", "moisturizer", "face wash",
-    ],
-    "Electronics": [
-        "mobile", "smartphone", "phone", "laptop", "headphone", "headphones",
-        "earphone", "earphones", "earbuds", "tv", "television", "smartwatch",
-        "smart watch", "camera", "speaker", "charger", "tablet", "electronic",
-        "electronics", "power bank", "powerbank", "keyboard", "mouse", "monitor",
-        "printer", "router", "trimmer", "bluetooth",
-    ],
-    "Home & Kitchen": [
-        "kitchen", "cookware", "home", "furniture", "bedding", "bedsheet",
-        "curtain", "pillow", "cushion", "decor", "storage", "mixer", "fan",
-        "lamp", "light", "mattress", "sofa", "chair", "table", "dinner set",
-        "pressure cooker", "cooker", "bottle", "flask", "wallpaper", "clock",
-        "iron", "vacuum",
-    ],
-    "Accessories": [
-        "watch", "bag", "bags", "wallet", "belt", "jewellery", "jewelry",
-        "sunglasses", "eyewear", "accessory", "accessories", "handbag",
-        "backpack", "sling", "clutch", "bracelet", "necklace", "earring", "ring",
-        "cap", "hat", "scarf", "tie",
-    ],
-    "Fashion": [
-        "shirt", "t-shirt", "tshirt", "tee", "kurta", "kurti", "saree", "sari",
-        "dress", "jeans", "top", "tops", "lehenga", "suit", "jacket", "hoodie",
-        "clothing", "apparel", "fashion", "shorts", "trouser", "pants",
-        "leggings", "blouse", "gown", "sweater", "sweatshirt", "innerwear",
-        "lingerie", "nightwear", "ethnic", "western", "dupatta", "salwar",
-    ],
+CATEGORY_RULES: dict[str, dict[str, list[str]]] = {
+    "Footwear": {
+        "phrases": [
+            "running shoes", "sports shoes", "casual shoes", "formal shoes",
+            "walking shoes", "flip flops", "flip-flops", "high heels",
+            "block heels", "wedding shoes",
+        ],
+        "strong": [
+            "shoe", "shoes", "sandal", "sandals", "sneaker", "sneakers",
+            "footwear", "boot", "boots", "heel", "heels", "slipper", "slippers",
+            "loafer", "loafers", "crocs", "chappal", "chappals", "mojari",
+            "mojaris", "jutti", "juttis", "floater", "floaters",
+        ],
+        "weak": ["sole", "lace", "laces", "walk", "comfort"],
+    },
+    "Grocery": {
+        "phrases": [
+            "kabuli chana", "whole jeera", "coriander powder",
+            "red chilli powder", "laal mirch", "tea leaves", "green tea",
+            "black tea", "herbal tea", "flower tea", "tea bags", "tea bag",
+            "ice cream", "cooking oil", "mustard oil", "sunflower oil",
+            "olive oil", "dry fruits", "gram flour", "soya chunks",
+            "peanut butter", "protein powder",
+        ],
+        "strong": [
+            "grocery", "groceries", "masala", "masalas", "spice", "spices",
+            "dal", "dals", "lentil", "lentils", "chana", "chickpea",
+            "chickpeas", "rajma", "atta", "flour", "sooji", "suji", "rava",
+            "semolina", "poha", "oats", "muesli", "cereal", "cornflakes",
+            "rice", "basmati", "quinoa", "sugar", "jaggery", "salt", "honey",
+            "ghee", "paneer", "coffee", "snack", "snacks", "namkeen",
+            "biscuit", "biscuits", "chocolate", "noodles", "pasta", "sauce",
+            "ketchup", "pickle", "achar", "papad", "almond", "almonds",
+            "cashew", "cashews", "raisin", "raisins", "dates", "chia", "sabja",
+            "besan", "maida", "jam", "mayonnaise", "vinegar", "jeera", "cumin",
+            "cummin", "saunf", "fennel", "coriander", "haldi", "turmeric",
+            "mirch", "chilli", "chili",
+        ],
+        "weak": [
+            "powder", "seeds", "oil", "organic", "natural", "whole", "premium",
+            "food", "edible",
+        ],
+    },
+    "Beauty": {
+        "phrases": [
+            "face wash", "hair oil", "body lotion", "body wash",
+            "eau de parfum", "eau de toilette", "nail polish", "lip balm",
+            "hair serum", "sun screen", "tea tree", "body scrub",
+            "shaving cream", "beard oil", "face serum", "night cream",
+            "day cream",
+        ],
+        "strong": [
+            "beauty", "makeup", "make-up", "cosmetic", "cosmetics", "skincare",
+            "skin care", "serum", "shampoo", "conditioner", "perfume", "parfum",
+            "fragrance", "lipstick", "kajal", "eyeliner", "moisturizer",
+            "moisturiser", "sunscreen", "foundation", "mascara", "deodorant",
+            "lotion", "trimmer", "grooming", "lip gloss", "nail", "haircare",
+            "hair care",
+        ],
+        "weak": [
+            "cream", "gel", "oil", "soap", "powder", "wash", "scrub", "mist",
+            "spray", "care",
+        ],
+    },
+    "Electronics": {
+        "phrases": [
+            "power bank", "powerbank", "bluetooth speaker",
+            "wireless earbuds", "smart watch", "mobile cover",
+            "screen protector", "memory card", "pen drive", "hard disk",
+            "gaming mouse", "mechanical keyboard", "usb cable",
+            "charging cable",
+        ],
+        "strong": [
+            "electronics", "electronic", "earbuds", "earbud", "earphone",
+            "earphones", "headphone", "headphones", "headset", "bluetooth",
+            "speaker", "speakers", "charger", "charging", "adapter", "laptop",
+            "tablet", "smartphone", "mobile", "phone", "smartwatch", "camera",
+            "webcam", "monitor", "printer", "router", "keyboard", "mouse",
+            "television", "tv", "projector", "computer", "airpods", "iphone",
+            "samsung", "redmi", "realme", "oneplus", "poco",
+        ],
+        "weak": [
+            "digital", "wireless", "smart", "portable", "rechargeable", "usb",
+            "battery",
+        ],
+    },
+    "Home & Kitchen": {
+        "phrases": [
+            "pressure cooker", "cookware set", "dinner set", "non stick",
+            "non-stick", "bed sheet", "bedsheet", "bed cover", "bath towel",
+            "kitchen tool", "storage box", "wall clock", "table lamp",
+            "floor lamp", "ceiling fan", "water bottle", "vacuum cleaner",
+            "air fryer", "mixer grinder", "chopping board", "frying pan",
+            "home decor", "wall decor", "soap dispenser",
+        ],
+        "strong": [
+            "kitchen", "cookware", "furniture", "bedding", "bedsheet",
+            "bedsheets", "pillow", "pillows", "cushion", "cushions",
+            "mattress", "sofa", "chair", "curtain", "curtains", "decor",
+            "lamp", "clock", "bottle", "flask", "casserole", "cooker",
+            "kadhai", "tawa", "grinder", "mixer", "blender", "juicer",
+            "toaster", "kettle", "fryer", "oven", "microwave", "refrigerator",
+            "fridge", "vacuum", "mop", "broom", "dustbin", "hanger",
+            "organizer", "shelving", "rack", "wallpaper", "carpet", "rug",
+            "doormat", "towel", "towels", "quilt", "duvet", "blanket",
+            "comforter", "pillowcase", "tablecloth", "coaster", "crockery",
+            "plate", "plates", "bowl", "bowls", "mug", "mugs", "cutlery",
+            "spoon", "spoons", "fork", "knife", "chopper", "peeler", "grater",
+            "sieve", "container", "containers", "jar", "jars", "dispenser",
+            "household", "furnishing",
+        ],
+        "weak": [
+            "home", "table", "light", "fan", "iron", "steel", "cotton", "set",
+            "pack", "piece", "pieces",
+        ],
+    },
+    "Accessories": {
+        "phrases": [
+            "carry bag", "laptop bag", "travel bag", "sling bag", "body bag",
+            "waist bag", "wrist watch", "analog watch", "digital watch",
+        ],
+        "strong": [
+            "watch", "watches", "bag", "bags", "wallet", "wallets", "belt",
+            "belts", "jewellery", "jewelry", "sunglasses", "eyewear",
+            "goggles", "handbag", "backpack", "sling", "clutch", "bracelet",
+            "necklace", "earring", "earrings", "ring", "rings", "pendant",
+            "bangle", "bangles", "anklet", "chain", "purse", "trolley",
+            "luggage", "suitcase", "umbrella", "cufflink", "cufflinks", "cap",
+            "hat", "scarf", "tie", "ties",
+        ],
+        "weak": [
+            "accessory", "accessories", "leather", "travel", "carry",
+        ],
+    },
+    "Fashion": {
+        "phrases": [
+            "t-shirt", "t shirt", "casual shirt", "formal shirt",
+            "polo t-shirt", "track pants", "palazzo pants", "salwar suit",
+            "kurta set", "ethnic wear", "winter jacket", "night suit",
+            "co-ord set", "coord set",
+        ],
+        "strong": [
+            "shirt", "shirts", "tshirt", "tee", "tees", "kurta", "kurti",
+            "kurtas", "saree", "sari", "dress", "dresses", "jeans", "jean",
+            "top", "tops", "lehenga", "suit", "suits", "jacket", "jackets",
+            "hoodie", "hoodies", "hooded", "sweatshirt", "sweatshirts",
+            "sweater", "sweaters", "clothing", "apparel", "fashion", "shorts",
+            "trouser", "trousers", "pants", "leggings", "blouse", "gown",
+            "dupatta", "salwar", "churidar", "chudidar", "kameez", "sherwani",
+            "dhoti", "lungi", "skirt", "jumpsuit", "innerwear", "lingerie",
+            "nightwear", "nightdress", "pajama", "pyjama", "camisole", "bra",
+            "briefs", "trunk", "vest", "socks", "stockings", "swimwear",
+            "bikini", "raincoat", "uniform", "ethnic", "western", "denim",
+        ],
+        "weak": [
+            "men", "mens", "women", "womens", "boys", "girls", "kids", "solid",
+            "printed", "checkered", "casual", "formal", "slim", "regular",
+            "light", "dark", "blue", "green", "black", "white", "red", "pink",
+            "yellow", "multicolor", "design", "designer", "style", "cotton",
+            "blend", "lycra", "polyester", "rayon", "viscose", "linen", "wool",
+            "warm", "padded", "textile", "textiles",
+        ],
+    },
 }
 
-CATEGORIES = ["Fashion", "Electronics", "Home & Kitchen", "Beauty", "Footwear", "Accessories"]
+CATEGORIES = [
+    "Fashion", "Electronics", "Home & Kitchen", "Grocery", "Beauty",
+    "Footwear", "Accessories",
+]
 VALID_CATEGORIES = set(CATEGORIES)
+
+# Verified Shopsy search pages: these keep the catalogue mixed even when the
+# saved FEED_URLS secret only points at clothing collections.
+CATEGORY_FEEDS = [
+    "https://www.shopsy.in/search?q=kitchen",
+    "https://www.shopsy.in/search?q=cookware",
+    "https://www.shopsy.in/search?q=curtains",
+    "https://www.shopsy.in/search?q=home%20decor",
+    "https://www.shopsy.in/search?q=earbuds",
+    "https://www.shopsy.in/search?q=perfume",
+    "https://www.shopsy.in/search?q=shoes",
+    "https://www.shopsy.in/search?q=backpack",
+]
 IMAGE_MAX_BYTES = 10 * 1024 * 1024
 PAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_DIMENSION = 1400
@@ -354,17 +494,94 @@ def is_supported_product_url(url: str) -> bool:
     return any(token in path for token in ("/p/", "/product/", "/dp/"))
 
 
-def infer_category(text: str, hint: str = "") -> str:
-    hint_clean = hint.strip().lower()
-    for category in CATEGORIES:
-        if hint_clean == category.lower():
-            return category
-    haystack = f"{text} {hint}".lower()
-    for category, words in CATEGORY_KEYWORDS.items():
-        for word in words:
-            if re.search(rf"(^|[^a-z0-9]){re.escape(word)}([^a-z0-9]|$)", haystack):
+def category_term_hits(haystack: str, term: str) -> int:
+    """Whole-word occurrences of a keyword, capped at two."""
+    if not haystack or not term:
+        return 0
+    pattern = rf"(?<![a-z0-9]){re.escape(term.lower())}(?![a-z0-9])"
+    return min(2, len(re.findall(pattern, haystack)))
+
+
+def category_score_text(text: str, rules: dict[str, dict[str, list[str]]]) -> tuple[str, int]:
+    text = (text or "").strip().lower()
+    if not text:
+        return "", 0
+    best = ""
+    best_score = 0
+    for category, rule in rules.items():
+        score = 0
+        for term in rule["phrases"]:
+            score += 12 * category_term_hits(text, term)
+        for term in rule["strong"]:
+            score += 8 * category_term_hits(text, term)
+        for term in rule["weak"]:
+            score += 2 * category_term_hits(text, term)
+        if score > best_score:
+            best_score = score
+            best = category
+    return best, best_score
+
+
+def category_best_match(text: str, rules: dict[str, dict[str, list[str]]]) -> str:
+    category, score = category_score_text(text, rules)
+    return category if score >= 4 else ""
+
+
+def infer_category(title: str, hint: str = "", description: str = "") -> str:
+    """Weighted category inference; titles matter twice as much as descriptions.
+
+    Feed/search hints win first (for example /search?q=kitchen), then title and
+    description are scored. Ambiguous words such as light, home, table and ring
+    carry a low weight so a light-blue shirt never lands in Home & Kitchen.
+    """
+    hint = (hint or "").strip().lower()
+    title = (title or "").strip().lower()
+    description = (description or "").strip().lower()
+
+    if hint:
+        normalized = re.sub(r"[^a-z0-9]+", "", hint)
+        for category in CATEGORIES:
+            if normalized == re.sub(r"[^a-z0-9]+", "", category.lower()):
                 return category
-    return "Other"
+        hint_match = category_best_match(hint, CATEGORY_RULES)
+        if hint_match:
+            # A broad feed hint must not override a clear product word: a shirt
+            # recommended on a shoes search page is still Fashion.
+            title_category, title_score = category_score_text(title, CATEGORY_RULES)
+            if title_score < 8 or title_category == hint_match:
+                return hint_match
+
+    if not title and not description:
+        return "Other"
+
+    best = ""
+    best_score = 0
+    second_score = 0
+    for category, rule in CATEGORY_RULES.items():
+        score = 0
+        for term in rule["phrases"]:
+            score += 12 * category_term_hits(title, term)
+            score += 5 * category_term_hits(description, term)
+        for term in rule["strong"]:
+            score += 8 * category_term_hits(title, term)
+            score += 3 * category_term_hits(description, term)
+        for term in rule["weak"]:
+            score += 2 * min(1, category_term_hits(title, term))
+            score += category_term_hits(description, term)
+
+        if score > best_score:
+            second_score = best_score
+            best_score = score
+            best = category
+        elif score > second_score:
+            second_score = score
+
+    if not best or best_score < 3:
+        return "Other"
+    # A near-tie is safer in "Other" than in the wrong category tab.
+    if second_score > 0 and best_score < second_score * 1.25:
+        return "Other"
+    return best
 
 
 def make_slug(title: str) -> str:
@@ -954,6 +1171,11 @@ class Config:
         feeds = [item.strip() for item in re.split(r"[,\n]+", feed_env) if item.strip()]
         if not feeds:
             feeds = list(DEFAULT_FEEDS)
+        # Always include the verified category searches so one clothing
+        # collection cannot fill the whole catalogue any more.
+        for category_feed in CATEGORY_FEEDS:
+            if category_feed not in feeds:
+                feeds.append(category_feed)
 
         max_products = (
             args.max_products if args.max_products is not None else env_int("MAX_PRODUCTS", 60)
@@ -1163,6 +1385,57 @@ class SupabaseClient:
             if not chunk:
                 continue
             self.patch("id=in.(" + ",".join(str(item) for item in chunk) + ")", values)
+
+    def recategorize(self, limit: int = 1500) -> tuple[int, int]:
+        """Re-score existing rows with the current rules.
+
+        Returns (checked, updated). The old first-match keyword order put every
+        light-blue shirt into Home & Kitchen; this pass repairs those rows with
+        the service key during a normal scheduled sync.
+        """
+        checked = 0
+        updated = 0
+        offset = 0
+        page = 200
+        while offset < max(1, limit):
+            path = (
+                f"{self.table}?select=id,title,description,brand,category"
+                f"&is_active=eq.true&order=id.asc&limit={page}&offset={offset}"
+            )
+            try:
+                data = self._request("GET", path).json()
+            except (ScrapeError, ValueError) as error:
+                LOGGER.info("Category recheck skipped: %s", error)
+                break
+            rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+            if not rows:
+                break
+
+            changed: dict[str, list[int]] = {}
+            for row in rows:
+                checked += 1
+                current = str(row.get("category") or "").strip()
+                inferred = infer_category(
+                    str(row.get("title") or ""),
+                    "",
+                    f"{row.get('description') or ''} {row.get('brand') or ''}",
+                )
+                # Keep a usable category when the new answer is "Other".
+                if inferred and inferred != "Other" and inferred != current:
+                    changed.setdefault(inferred, []).append(int(row.get("id") or 0))
+
+            for category, ids in changed.items():
+                try:
+                    self.patch_ids(ids, {"category": category})
+                    updated += len(ids)
+                except ScrapeError as error:
+                    LOGGER.info("Category patch skipped for %s: %s", category, error)
+
+            offset += page
+            if len(rows) < page:
+                break
+
+        return checked, updated
 
     def close(self) -> None:
         self.session.close()
@@ -1581,8 +1854,9 @@ def build_product_payload(
         raise ScrapeError("No image could be stored locally.")
 
     category = infer_category(
-        f"{metadata['title']} {metadata['description']} {metadata['brand']}",
+        metadata["title"],
         metadata["category_hint"] or feed_hint,
+        f"{metadata['description']} {metadata['brand']}",
     )
     if category == "Other" and feed_hint in VALID_CATEGORIES:
         category = feed_hint
@@ -1611,8 +1885,12 @@ def build_product_payload(
 
 
 def feed_category_hint(feed_url: str) -> str:
-    path = (urlsplit(feed_url).path or "").replace("-", " ").replace("/", " ")
-    return infer_category(path)
+    parts = urlsplit(feed_url)
+    path = (parts.path or "").replace("-", " ").replace("/", " ")
+    # /search?q=kitchen is the only reliable category signal on Shopsy, so the
+    # query string is part of the hint as well.
+    query_words = " ".join(value for _, value in parse_qsl(parts.query or "", keep_blank_values=False))
+    return infer_category(f"{path} {query_words}")
 
 
 def preview_product(config: Config, session: requests.Session, product_url: str) -> None:
@@ -1758,6 +2036,26 @@ def deal_decision(
     return "skip_no_drop"
 
 
+def round_robin_links(batches: list[tuple[str, list[str]]]) -> Iterable[tuple[str, str]]:
+    """Yield (link, category hint) taking one link from each feed per round.
+
+    Fashion collections often expose hundreds of links, so a plain feed-by-feed
+    loop spends the whole MAX_PRODUCTS budget before the home/kitchen feed is
+    ever touched. Round-robin keeps every category represented.
+    """
+    queues = [(hint, list(links)) for hint, links in batches if links]
+    while queues:
+        remaining: list[tuple[str, list[str]]] = []
+        for hint, links in queues:
+            if not links:
+                continue
+            link = links.pop(0)
+            yield link, hint
+            if links:
+                remaining.append((hint, links))
+        queues = remaining
+
+
 def run_sync(config: Config, args: argparse.Namespace) -> int:
     session = build_session()
     client: Optional[SupabaseClient] = None
@@ -1768,6 +2066,13 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
     try:
         if not config.dry_run:
             client = SupabaseClient(config)
+            # Repair rows classified by the old first-match keyword order
+            # (light-blue shirts in Home & Kitchen, spices in Beauty, ...).
+            try:
+                checked, updated = client.recategorize(1500)
+                LOGGER.info("Category recheck: %d checked, %d updated", checked, updated)
+            except Exception as error:
+                LOGGER.warning("Category recheck failed (sync continues): %s", error)
 
         def deal_check(preview: dict[str, Any]) -> bool:
             decision = deal_decision(client, config, preview)
@@ -1796,9 +2101,9 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
                 deal_stats["new"] += 1
             return True
 
+        feed_batches: list[tuple[str, list[str]]] = []
+        queued_links: set[str] = set()
         for feed in config.feeds:
-            if len(collected) >= config.max_products:
-                break
             if not is_safe_public_url(feed):
                 LOGGER.warning("Skipping unsafe feed URL: %s", feed)
                 continue
@@ -1814,35 +2119,37 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
 
             hint = feed_category_hint(feed)
             links = extract_product_links(html, final_url or feed, config.per_feed)
+            fresh = [link for link in links if link not in queued_links]
+            queued_links.update(fresh)
+            if fresh:
+                feed_batches.append((hint, fresh))
             LOGGER.info("Found %d product link(s) on %s", len(links), feed)
 
-            for link in links:
-                if len(collected) >= config.max_products:
-                    break
-                if link in collected:
-                    continue
-                if url_is_blocked(link):
-                    LOGGER.warning("Skipping blocked store: %s", link)
-                    continue
-                try:
-                    if config.dry_run:
-                        preview_product(config, session, link)
-                    else:
-                        payload = build_product_payload(config, session, link, hint, deal_check=deal_check)
-                        if payload:
-                            collected[payload["original_url"]] = payload
-                            LOGGER.info(
-                                "Prepared: %s | ₹%s | %s | %s%% off",
-                                truncate(payload["title"], 70),
-                                payload["price"],
-                                payload["category"],
-                                payload["discount_percent"],
-                            )
-                except ScrapeError as error:
-                    LOGGER.warning("Skipped %s: %s", link, error)
-                except Exception as error:  # Keep the batch alive on one bad page.
-                    LOGGER.exception("Unexpected error for %s: %s", link, error)
-                time.sleep(random.uniform(0.5, 1.1))
+        for link, hint in round_robin_links(feed_batches):
+            if len(collected) >= config.max_products:
+                break
+            if url_is_blocked(link):
+                LOGGER.warning("Skipping blocked store: %s", link)
+                continue
+            try:
+                if config.dry_run:
+                    preview_product(config, session, link)
+                else:
+                    payload = build_product_payload(config, session, link, hint, deal_check=deal_check)
+                    if payload:
+                        collected[payload["original_url"]] = payload
+                        LOGGER.info(
+                            "Prepared: %s | ₹%s | %s | %s%% off",
+                            truncate(payload["title"], 70),
+                            payload["price"],
+                            payload["category"],
+                            payload["discount_percent"],
+                        )
+            except ScrapeError as error:
+                LOGGER.warning("Skipped %s: %s", link, error)
+            except Exception as error:  # Keep the batch alive on one bad page.
+                LOGGER.exception("Unexpected error for %s: %s", link, error)
+            time.sleep(random.uniform(0.5, 1.1))
 
         if config.dry_run:
             LOGGER.info("[dry-run] No products were written and no images were uploaded")

@@ -358,6 +358,65 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
 }
 
 /**
+ * Interleave products so the first screen never shows one category only.
+ * Order inside each category is preserved; categories take turns.
+ *
+ * @param list<array<string,mixed>> $products
+ * @return list<array<string,mixed>>
+ */
+function mix_products_by_category(array $products, int $limit = PRODUCTS_PER_PAGE): array
+{
+    $limit = max(1, $limit);
+    $buckets = [];
+    $order = [];
+    $seen = [];
+    foreach ($products as $product) {
+        if (!is_array($product)) {
+            continue;
+        }
+        $id = (string) ($product['slug'] ?? $product['id'] ?? '');
+        if ($id !== '' && isset($seen[$id])) {
+            continue;
+        }
+        if ($id !== '') {
+            $seen[$id] = true;
+        }
+        $category = trim((string) ($product['category'] ?? ''));
+        if ($category === '') {
+            $category = 'Other';
+        }
+        if (!isset($buckets[$category])) {
+            $buckets[$category] = [];
+            $order[] = $category;
+        }
+        $buckets[$category][] = $product;
+    }
+
+    $positions = array_fill_keys($order, 0);
+    $mixed = [];
+    while (count($mixed) < $limit) {
+        $added = false;
+        foreach ($order as $category) {
+            $index = $positions[$category];
+            if ($index >= count($buckets[$category])) {
+                continue;
+            }
+            $mixed[] = $buckets[$category][$index];
+            $positions[$category] = $index + 1;
+            $added = true;
+            if (count($mixed) >= $limit) {
+                break;
+            }
+        }
+        if (!$added) {
+            break;
+        }
+    }
+
+    return $mixed;
+}
+
+/**
  * Brands and price range for the storefront filter panel.
  *
  * @return array{brands:list<string>,price_min:float,price_max:float,has_rating:bool}

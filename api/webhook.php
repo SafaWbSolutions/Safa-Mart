@@ -63,6 +63,7 @@ if ($command === '/start' || $command === '/help') {
         . "/debug <link> – explain why a link fails\n"
         . "/repairlinks – fix old affiliate links and hide non-product pages\n"
         . "/refreshmeta – refresh brand, rating and description of old products\n"
+        . "/recategorize – re-check every product's category with the new rules\n"
         . "/highlight &lt;slug|id&gt; [days] [badge] – spotlight a product on the home page\n"
         . "/unhighlight &lt;slug|id&gt; – remove a spotlight\n"
         . "/highlights – list current spotlights\n"
@@ -330,6 +331,77 @@ if ($command === '/refreshmeta') {
         'command' => '/refreshmeta',
         'updated' => $updated,
         'hidden'  => $hidden,
+        'failed'  => $failed,
+    ]);
+}
+if ($command === '/recategorize') {
+    @set_time_limit(300);
+    ignore_user_abort(true);
+    telegram_send_message($chatId, '🏷️ Re-checking product categories…');
+
+    $checked = 0;
+    $updated = 0;
+    $failed = 0;
+    $offset = 0;
+    $limit = 200;
+    while ($offset < 5000) {
+        $query = 'select=id,title,description,brand,category&is_active=eq.true'
+            . '&order=id.asc&limit=' . $limit . '&offset=' . $offset;
+        $result = supabase_request('GET', supabase_table() . '?' . $query, null, [
+            'service' => true,
+            'timeout' => 30,
+        ]);
+        if (!$result['ok'] || !is_array($result['data'])) {
+            $failed++;
+            break;
+        }
+        $rows = $result['data'];
+        if (!$rows) {
+            break;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $checked++;
+            $current = trim((string) ($row['category'] ?? ''));
+            $inferred = infer_category(
+                (string) ($row['title'] ?? ''),
+                '',
+                trim((string) ($row['description'] ?? '') . ' ' . (string) ($row['brand'] ?? ''))
+            );
+            // Never wipe a usable category with "Other"; only move a row when
+            // the new answer is a real, different category.
+            if ($inferred === '' || $inferred === 'Other' || $inferred === $current) {
+                continue;
+            }
+            $patch = supabase_patch('id=eq.' . (int) ($row['id'] ?? 0), ['category' => $inferred]);
+            if ($patch['ok']) {
+                $updated++;
+            } else {
+                $failed++;
+            }
+        }
+
+        $offset += $limit;
+        if (count($rows) < $limit) {
+            break;
+        }
+    }
+
+    telegram_send_message(
+        $chatId,
+        '✅ <b>Category check finished</b>' . "\n"
+        . '• Checked: ' . $checked . "\n"
+        . '• Updated: ' . $updated . "\n"
+        . '• Failed: ' . $failed
+    );
+    json_response([
+        'ok'      => true,
+        'command' => '/recategorize',
+        'checked' => $checked,
+        'updated' => $updated,
         'failed'  => $failed,
     ]);
 }
@@ -711,8 +783,9 @@ foreach ($urls as $url) {
         }
 
         $category = infer_category(
-            $metadataTitle . ' ' . ($metadata['description'] ?? '') . ' ' . ($metadata['brand'] ?? ''),
-            (string) ($metadata['category_hint'] ?? '')
+            $metadataTitle,
+            (string) ($metadata['category_hint'] ?? ''),
+            ($metadata['description'] ?? '') . ' ' . ($metadata['brand'] ?? '')
         );
 
         $payload = [

@@ -744,59 +744,290 @@ function is_product_page_url(string $url): bool
     }
 }
 
-function infer_category(string $text, string $hint = ''): string
+/**
+ * Weighted keyword rules for category inference.
+ *
+ * "phrases" are multi-word signals (highest confidence), "strong" are
+ * unambiguous product words and "weak" are context words that only help when
+ * the title already points at a category. Deliberately ambiguous words such
+ * as light, home, table, iron, fan, ring, cap and tie are weak so a light-blue
+ * shirt can never land in Home & Kitchen.
+ *
+ * @return array<string,array{phrases:list<string>,strong:list<string>,weak:list<string>}>
+ */
+function category_keyword_rules(): array
 {
-    $hint = strtolower(trim($hint));
+    return [
+        'Footwear' => [
+            'phrases' => [
+                'running shoes', 'sports shoes', 'casual shoes', 'formal shoes', 'walking shoes',
+                'flip flops', 'flip-flops', 'high heels', 'block heels', 'wedding shoes',
+            ],
+            'strong' => [
+                'shoe', 'shoes', 'sandal', 'sandals', 'sneaker', 'sneakers', 'footwear', 'boot',
+                'boots', 'heel', 'heels', 'slipper', 'slippers', 'loafer', 'loafers', 'crocs',
+                'chappal', 'chappals', 'mojari', 'mojaris', 'jutti', 'juttis', 'floater', 'floaters',
+            ],
+            'weak' => ['sole', 'lace', 'laces', 'walk', 'comfort'],
+        ],
+        'Grocery' => [
+            'phrases' => [
+                'kabuli chana', 'whole jeera', 'coriander powder', 'red chilli powder', 'laal mirch',
+                'tea leaves', 'green tea', 'black tea', 'herbal tea', 'flower tea', 'tea bags',
+                'tea bag', 'ice cream', 'cooking oil', 'mustard oil', 'sunflower oil', 'olive oil',
+                'dry fruits', 'gram flour', 'soya chunks', 'peanut butter', 'protein powder',
+            ],
+            'strong' => [
+                'grocery', 'groceries', 'masala', 'masalas', 'spice', 'spices', 'dal', 'dals',
+                'lentil', 'lentils', 'chana', 'chickpea', 'chickpeas', 'rajma', 'atta', 'flour',
+                'sooji', 'suji', 'rava', 'semolina', 'poha', 'oats', 'muesli', 'cereal', 'cornflakes',
+                'rice', 'basmati', 'quinoa', 'sugar', 'jaggery', 'salt', 'honey', 'ghee', 'paneer',
+                'coffee', 'snack', 'snacks', 'namkeen', 'biscuit', 'biscuits', 'chocolate',
+                'noodles', 'pasta', 'sauce', 'ketchup', 'pickle', 'achar', 'papad', 'almond',
+                'almonds', 'cashew', 'cashews', 'raisin', 'raisins', 'dates', 'chia', 'sabja',
+                'besan', 'maida', 'jam', 'mayonnaise', 'vinegar', 'jeera', 'cumin', 'cummin',
+                'saunf', 'fennel', 'coriander', 'haldi', 'turmeric', 'mirch', 'chilli', 'chili',
+            ],
+            'weak' => ['powder', 'seeds', 'oil', 'organic', 'natural', 'whole', 'premium', 'food', 'edible'],
+        ],
+        'Beauty' => [
+            'phrases' => [
+                'face wash', 'hair oil', 'body lotion', 'body wash', 'eau de parfum', 'eau de toilette',
+                'nail polish', 'lip balm', 'hair serum', 'sun screen', 'tea tree', 'body scrub',
+                'shaving cream', 'beard oil', 'face serum', 'night cream', 'day cream',
+            ],
+            'strong' => [
+                'beauty', 'makeup', 'make-up', 'cosmetic', 'cosmetics', 'skincare', 'skin care',
+                'serum', 'shampoo', 'conditioner', 'perfume', 'parfum', 'fragrance', 'lipstick',
+                'kajal', 'eyeliner', 'moisturizer', 'moisturiser', 'sunscreen', 'foundation',
+                'mascara', 'deodorant', 'lotion', 'trimmer', 'grooming', 'lip gloss', 'nail',
+                'haircare', 'hair care',
+            ],
+            'weak' => ['cream', 'gel', 'oil', 'soap', 'powder', 'wash', 'scrub', 'mist', 'spray', 'care'],
+        ],
+        'Electronics' => [
+            'phrases' => [
+                'power bank', 'powerbank', 'bluetooth speaker', 'wireless earbuds', 'smart watch',
+                'mobile cover', 'screen protector', 'memory card', 'pen drive', 'hard disk',
+                'gaming mouse', 'mechanical keyboard', 'usb cable', 'charging cable',
+            ],
+            'strong' => [
+                'electronics', 'electronic', 'earbuds', 'earbud', 'earphone', 'earphones',
+                'headphone', 'headphones', 'headset', 'bluetooth', 'speaker', 'speakers',
+                'charger', 'charging', 'adapter', 'laptop', 'tablet', 'smartphone', 'mobile',
+                'phone', 'smartwatch', 'camera', 'webcam', 'monitor', 'printer', 'router',
+                'keyboard', 'mouse', 'television', 'tv', 'projector', 'computer', 'airpods',
+                'iphone', 'samsung', 'redmi', 'realme', 'oneplus', 'poco',
+            ],
+            'weak' => ['digital', 'wireless', 'smart', 'portable', 'rechargeable', 'usb', 'battery'],
+        ],
+        'Home & Kitchen' => [
+            'phrases' => [
+                'pressure cooker', 'cookware set', 'dinner set', 'non stick', 'non-stick',
+                'bed sheet', 'bedsheet', 'bed cover', 'bath towel', 'kitchen tool', 'storage box',
+                'wall clock', 'table lamp', 'floor lamp', 'ceiling fan', 'water bottle',
+                'vacuum cleaner', 'air fryer', 'mixer grinder', 'chopping board', 'frying pan',
+                'home decor', 'wall decor', 'soap dispenser',
+            ],
+            'strong' => [
+                'kitchen', 'cookware', 'furniture', 'bedding', 'bedsheet', 'bedsheets', 'pillow',
+                'pillows', 'cushion', 'cushions', 'mattress', 'sofa', 'chair', 'curtain',
+                'curtains', 'decor', 'lamp', 'clock', 'bottle', 'flask', 'casserole', 'cooker',
+                'kadhai', 'tawa', 'grinder', 'mixer', 'blender', 'juicer', 'toaster', 'kettle',
+                'fryer', 'oven', 'microwave', 'refrigerator', 'fridge', 'vacuum', 'mop', 'broom',
+                'dustbin', 'hanger', 'organizer', 'shelving', 'rack', 'wallpaper', 'carpet', 'rug',
+                'doormat', 'towel', 'towels', 'quilt', 'duvet', 'blanket', 'comforter',
+                'pillowcase', 'tablecloth', 'coaster', 'crockery', 'plate', 'plates', 'bowl',
+                'bowls', 'mug', 'mugs', 'cutlery', 'spoon', 'spoons', 'fork', 'knife', 'chopper',
+                'peeler', 'grater', 'sieve', 'container', 'containers', 'jar', 'jars', 'dispenser',
+                'household', 'furnishing',
+            ],
+            'weak' => ['home', 'table', 'light', 'fan', 'iron', 'steel', 'cotton', 'set', 'pack', 'piece', 'pieces'],
+        ],
+        'Accessories' => [
+            'phrases' => [
+                'carry bag', 'laptop bag', 'travel bag', 'sling bag', 'body bag', 'waist bag',
+                'wrist watch', 'analog watch', 'digital watch',
+            ],
+            'strong' => [
+                'watch', 'watches', 'bag', 'bags', 'wallet', 'wallets', 'belt', 'belts',
+                'jewellery', 'jewelry', 'sunglasses', 'eyewear', 'goggles', 'handbag', 'backpack',
+                'sling', 'clutch', 'bracelet', 'necklace', 'earring', 'earrings', 'ring', 'rings',
+                'pendant', 'bangle', 'bangles', 'anklet', 'chain', 'purse', 'trolley', 'luggage',
+                'suitcase', 'umbrella', 'cufflink', 'cufflinks', 'cap', 'hat', 'scarf', 'tie', 'ties',
+            ],
+            'weak' => ['accessory', 'accessories', 'leather', 'travel', 'carry'],
+        ],
+        'Fashion' => [
+            'phrases' => [
+                't-shirt', 't shirt', 'casual shirt', 'formal shirt', 'polo t-shirt', 'track pants',
+                'palazzo pants', 'salwar suit', 'kurta set', 'ethnic wear', 'winter jacket',
+                'night suit', 'co-ord set', 'coord set',
+            ],
+            'strong' => [
+                'shirt', 'shirts', 'tshirt', 'tee', 'tees', 'kurta', 'kurti', 'kurtas', 'saree',
+                'sari', 'dress', 'dresses', 'jeans', 'jean', 'top', 'tops', 'lehenga', 'suit',
+                'suits', 'jacket', 'jackets', 'hoodie', 'hoodies', 'hooded', 'sweatshirt',
+                'sweatshirts', 'sweater', 'sweaters', 'clothing', 'apparel', 'fashion', 'shorts',
+                'trouser', 'trousers', 'pants', 'leggings', 'blouse', 'gown', 'dupatta', 'salwar',
+                'churidar', 'chudidar', 'kameez', 'sherwani', 'dhoti', 'lungi', 'skirt', 'jumpsuit',
+                'innerwear', 'lingerie', 'nightwear', 'nightdress', 'pajama', 'pyjama', 'camisole',
+                'bra', 'briefs', 'trunk', 'vest', 'socks', 'stockings', 'swimwear', 'bikini',
+                'raincoat', 'uniform', 'ethnic', 'western', 'denim',
+            ],
+            'weak' => [
+                'men', 'mens', 'women', 'womens', 'boys', 'girls', 'kids', 'solid', 'printed',
+                'checkered', 'casual', 'formal', 'slim', 'regular', 'light', 'dark', 'blue',
+                'green', 'black', 'white', 'red', 'pink', 'yellow', 'multicolor', 'design',
+                'designer', 'style', 'cotton', 'blend', 'lycra', 'polyester', 'rayon', 'viscose',
+                'linen', 'wool', 'warm', 'padded', 'textile', 'textiles',
+            ],
+        ],
+    ];
+}
+
+/** Number of whole-word occurrences of a term, capped at two. */
+function category_term_hits(string $haystack, string $term): int
+{
+    if ($haystack === '' || $term === '') {
+        return 0;
+    }
+    $pattern = '/(?<![a-z0-9])' . preg_quote(strtolower($term), '/') . '(?![a-z0-9])/i';
+    $count = preg_match_all($pattern, $haystack);
+    return min(2, (int) $count);
+}
+
+/**
+ * Weighted scores for a short piece of text, used for feed/search hints.
+ *
+ * @param array<string,array{phrases:list<string>,strong:list<string>,weak:list<string>}> $rules
+ * @return array{category:string,score:int}
+ */
+function category_score_text(string $text, array $rules): array
+{
+    $text = strtolower(trim($text));
+    $best = '';
+    $bestScore = 0;
+    if ($text === '') {
+        return ['category' => '', 'score' => 0];
+    }
+
+    foreach ($rules as $category => $rule) {
+        $score = 0;
+        foreach ($rule['phrases'] as $term) {
+            $score += 12 * category_term_hits($text, $term);
+        }
+        foreach ($rule['strong'] as $term) {
+            $score += 8 * category_term_hits($text, $term);
+        }
+        foreach ($rule['weak'] as $term) {
+            $score += 2 * category_term_hits($text, $term);
+        }
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $best = $category;
+        }
+    }
+
+    return ['category' => $best, 'score' => $bestScore];
+}
+
+/**
+ * Best category for a short piece of text (used for feed/search hints).
+ *
+ * @param array<string,array{phrases:list<string>,strong:list<string>,weak:list<string>}> $rules
+ */
+function category_best_match(string $text, array $rules): string
+{
+    $match = category_score_text($text, $rules);
+    return $match['score'] >= 4 ? $match['category'] : '';
+}
+
+/** Match "home & kitchen", "home-kitchen" or "homeandkitchen" to a category. */
+function category_hint_match(string $hint): string
+{
+    $normalized = preg_replace('/[^a-z0-9]+/', '', strtolower($hint));
+    if ($normalized === '') {
+        return '';
+    }
     foreach (PRODUCT_CATEGORIES as $category) {
-        if ($hint === strtolower($category)) {
+        if ($normalized === preg_replace('/[^a-z0-9]+/', '', strtolower($category))) {
             return $category;
         }
     }
+    return '';
+}
 
-    $haystack = strtolower($text . ' ' . $hint);
-    $keywords = [
-        'Footwear' => [
-            'shoe', 'shoes', 'sandal', 'sandals', 'sneaker', 'sneakers', 'footwear', 'boot', 'boots',
-            'heel', 'heels', 'slipper', 'slippers', 'loafer', 'loafers', 'flip flop', 'flip-flop', 'crocs',
-        ],
-        'Beauty' => [
-            'beauty', 'makeup', 'make-up', 'cosmetic', 'cosmetics', 'skincare', 'skin care', 'serum',
-            'cream', 'shampoo', 'conditioner', 'perfume', 'fragrance', 'lipstick', 'hair oil', 'haircare',
-            'grooming', 'nail', 'eyeliner', 'kajal', 'sunscreen', 'moisturizer', 'face wash',
-        ],
-        'Electronics' => [
-            'mobile', 'smartphone', 'phone', 'laptop', 'headphone', 'headphones', 'earphone', 'earphones',
-            'earbuds', 'tv', 'television', 'smartwatch', 'smart watch', 'camera', 'speaker', 'charger',
-            'tablet', 'electronic', 'electronics', 'power bank', 'powerbank', 'keyboard', 'mouse',
-            'monitor', 'printer', 'router', 'trimmer', 'bluetooth',
-        ],
-        'Home & Kitchen' => [
-            'kitchen', 'cookware', 'home', 'furniture', 'bedding', 'bedsheet', 'curtain', 'pillow',
-            'cushion', 'decor', 'storage', 'mixer', 'fan', 'lamp', 'light', 'mattress', 'sofa', 'chair',
-            'table', 'dinner set', 'pressure cooker', 'cooker', 'bottle', 'flask', 'wallpaper', 'clock',
-            'iron', 'vacuum',
-        ],
-        'Accessories' => [
-            'watch', 'bag', 'bags', 'wallet', 'belt', 'jewellery', 'jewelry', 'sunglasses', 'eyewear',
-            'accessory', 'accessories', 'handbag', 'backpack', 'sling', 'clutch', 'bracelet', 'necklace',
-            'earring', 'ring', 'cap', 'hat', 'scarf', 'tie',
-        ],
-        'Fashion' => [
-            'shirt', 't-shirt', 'tshirt', 'tee', 'kurta', 'kurti', 'saree', 'sari', 'dress', 'jeans',
-            'top', 'tops', 'lehenga', 'suit', 'jacket', 'hoodie', 'clothing', 'apparel', 'fashion',
-            'shorts', 'trouser', 'pants', 'leggings', 'blouse', 'gown', 'sweater', 'sweatshirt',
-            'innerwear', 'lingerie', 'nightwear', 'ethnic', 'western', 'dupatta', 'salwar',
-        ],
-    ];
+/**
+ * Classify a product from its title, feed/search hint and description.
+ *
+ * Titles carry double weight, so "Men Light Blue Shirt" stays Fashion even
+ * though it also contains the weak Home word "light".
+ */
+function infer_category(string $title, string $hint = '', string $description = ''): string
+{
+    $rules = category_keyword_rules();
+    $title = strtolower(trim($title));
+    $description = strtolower(trim($description));
+    $hint = trim(strtolower($hint));
 
-    foreach ($keywords as $category => $words) {
-        foreach ($words as $word) {
-            if (preg_match('/(^|[^a-z0-9])' . preg_quote($word, '/') . '([^a-z0-9]|$)/i', $haystack)) {
-                return $category;
+    if ($hint !== '') {
+        $exact = category_hint_match($hint);
+        if ($exact !== '') {
+            return $exact;
+        }
+        $hintMatch = category_best_match($hint, $rules);
+        if ($hintMatch !== '') {
+            // A broad feed hint must not override a clear product word: a
+            // shirt recommended on a shoes search page is still Fashion.
+            $titleMatch = category_score_text($title, $rules);
+            if ($titleMatch['score'] < 8 || $titleMatch['category'] === $hintMatch) {
+                return $hintMatch;
             }
         }
     }
-    return 'Other';
+
+    if ($title === '' && $description === '') {
+        return 'Other';
+    }
+
+    $best = '';
+    $bestScore = 0;
+    $secondScore = 0;
+    foreach ($rules as $category => $rule) {
+        $score = 0;
+        foreach ($rule['phrases'] as $term) {
+            $score += 12 * category_term_hits($title, $term);
+            $score += 5 * category_term_hits($description, $term);
+        }
+        foreach ($rule['strong'] as $term) {
+            $score += 8 * category_term_hits($title, $term);
+            $score += 3 * category_term_hits($description, $term);
+        }
+        foreach ($rule['weak'] as $term) {
+            $score += 2 * min(1, category_term_hits($title, $term));
+            $score += category_term_hits($description, $term);
+        }
+
+        if ($score > $bestScore) {
+            $secondScore = $bestScore;
+            $bestScore = $score;
+            $best = $category;
+        } elseif ($score > $secondScore) {
+            $secondScore = $score;
+        }
+    }
+
+    if ($best === '' || $bestScore < 3) {
+        return 'Other';
+    }
+    // When two categories are almost tied the safest place is "Other"; a
+    // wrong tab is worse than a product waiting for a clearer title.
+    if ($secondScore > 0 && $bestScore < $secondScore * 1.25) {
+        return 'Other';
+    }
+
+    return $best;
 }
 
 function rate_limit_hit(string $key, int $limit, int $windowSeconds): bool

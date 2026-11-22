@@ -150,7 +150,7 @@ safa_define('PRODUCTS_PER_PAGE', max(8, min(60, (int) safa_config_value('PRODUCT
 // chhup jate hain — koi manual command nahi chahiye. Band karna ho to
 // config.local.php me 'HIDE_UNAFFILIATED_PRODUCTS' => false kar do.
 safa_define('HIDE_UNAFFILIATED_PRODUCTS', safa_bool(safa_config_value('HIDE_UNAFFILIATED_PRODUCTS', true)));
-safa_define('PRODUCT_CATEGORIES', ['Fashion', 'Electronics', 'Home & Kitchen', 'Beauty', 'Footwear', 'Accessories']);
+safa_define('PRODUCT_CATEGORIES', ['Fashion', 'Electronics', 'Home & Kitchen', 'Grocery', 'Beauty', 'Footwear', 'Accessories']);
 safa_define('PLATFORM_FILTERS', ['Flipkart', 'Myntra', 'Amazon', 'Ajio', 'Shopsy', 'DigiHaat']);
 
 // ---------------------------------------------------------------------------
