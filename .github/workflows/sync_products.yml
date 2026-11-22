@@ -101,11 +101,12 @@ jobs:
             echo "Push announce skipped: SITE_URL or UPLOAD_API_SECRET is missing."
             exit 0
           fi
+          base="${SITE_URL%/}"
           code=$(curl -sS -o /tmp/safa-push.json -w "%{http_code}" -X POST \
             -H "X-Api-Secret: $UPLOAD_API_SECRET" \
             -H "Content-Type: application/json" \
             --data '{}' \
-            "$SITE_URL/api/push.php?action=announce" || echo "000")
+            "$base/api/push.php?action=announce" || echo "000")
           echo "Push announce HTTP $code"
           if [ -f /tmp/safa-push.json ]; then
             cat /tmp/safa-push.json || true
