@@ -511,22 +511,99 @@
         });
     }
 
-    // Android can rotate a push endpoint while the app stays installed. Pick
-    // that up when the user returns to the app (at most twice an hour).
-    document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState !== 'visible' || !pushSupported) {
-            return;
-        }
-        var last = 0;
+    // Follow button logic for product cards and product page
+    var FOLLOW_KEY = 'safa_followed_v1';
+
+    function loadFollowed() {
         try {
-            last = Number(window.localStorage.getItem(SYNC_KEY)) || 0;
+            var raw = window.localStorage.getItem(FOLLOW_KEY);
+            return raw ? JSON.parse(raw) : [];
         } catch (error) {
-            last = 0;
+            return [];
         }
-        if (Date.now() - last > 1800000) {
-            refreshSubscription();
+    }
+
+    function saveFollowed(followed) {
+        try {
+            window.localStorage.setItem(FOLLOW_KEY, JSON.stringify(followed));
+        } catch (error) {
+            /* ignore */
         }
-    });
+    }
+
+    function isFollowed(slug) {
+        var followed = loadFollowed();
+        return followed.indexOf(slug) !== -1;
+    }
+
+    function toggleFollow(slug, button) {
+        var followed = loadFollowed();
+        var idx = followed.indexOf(slug);
+        if (idx === -1) {
+            followed.push(slug);
+            button.setAttribute('aria-pressed', 'true');
+            button.classList.add('followed');
+            if (button.querySelector('.follow-text')) {
+                button.querySelector('.follow-text').textContent = 'Following';
+            }
+        } else {
+            followed.splice(idx, 1);
+            button.setAttribute('aria-pressed', 'false');
+            button.classList.remove('followed');
+            if (button.querySelector('.follow-text')) {
+                button.querySelector('.follow-text').textContent = 'Follow';
+            }
+        }
+        saveFollowed(followed);
+
+        // If push is enabled, sync follows to server
+        if (subscribed) {
+            currentSubscription().then(function (sub) {
+                if (sub) {
+                    post('follow-sync', {
+                        subscription: sub.toJSON(),
+                        followed: followed
+                    }).catch(function () { /* ignore */ });
+                }
+            });
+    }
+
+    // Initialize follow buttons on page load
+    function initFollowButtons() {
+        document.querySelectorAll('.follow-btn[data-slug]').forEach(function (button) {
+            var slug = button.getAttribute('data-slug');
+            if (!slug) return;
+            if (isFollowed(slug)) {
+                button.setAttribute('aria-pressed', 'true');
+                button.classList.add('followed');
+                if (button.querySelector('.follow-text')) {
+                    button.querySelector('.follow-text').textContent = 'Following';
+                }
+            }
+            button.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleFollow(slug, button);
+            });
+        });
+    }
+
+    // Run on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFollowButtons);
+    } else {
+        initFollowButtons();
+    }
+
+    // Re-init after dynamic content loads (e.g., infinite scroll)
+    var origFetchProducts = window.fetchProducts || function () {};
+    window.fetchProducts = function () {
+        var result = origFetchProducts.apply(this, arguments);
+        if (result && typeof result.then === 'function') {
+            result.then(initFollowButtons);
+        }
+        return result;
+    };
 
     syncUI();
 })();

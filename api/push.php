@@ -217,6 +217,55 @@ if ($action === 'test') {
     ]);
 }
 
+/**
+ * POST ?action=follow-sync — sync followed product slugs for a subscription.
+ * Expects: { subscription: {...}, followed: ["slug1", "slug2", ...] }
+ * Stores the followed slugs against the subscription endpoint.
+ */
+if ($action === 'follow-sync') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        json_response(['ok' => false, 'error' => 'POST required'], 405);
+    }
+    if (!push_same_origin_request()) {
+        json_response(['ok' => false, 'error' => 'Origin not allowed'], 403);
+    }
+    if (!push_is_configured()) {
+        json_response(['ok' => false, 'error' => 'Push is not configured on the server yet.'], 503);
+    }
+
+    $raw = file_get_contents('php://input');
+    if ($raw === false || strlen($raw) > 16384) {
+        json_response(['ok' => false, 'error' => 'Invalid payload'], 400);
+    }
+    $payload = json_decode($raw, true);
+    if (!is_array($payload)) {
+        json_response(['ok' => false, 'error' => 'Invalid JSON'], 400);
+    }
+
+    $endpoint = trim((string) ($payload['subscription']['endpoint'] ?? ''));
+    $followed = is_array($payload['followed'] ?? null) ? $payload['followed'] : [];
+    $followed = array_values(array_unique(array_filter($followed, static function ($v): bool {
+        return is_string($v) && strlen($v) > 0 && strlen($v) < 200;
+    })));
+
+    $row = push_subscriptions_load()[substr(sha1($endpoint), 0, 20)] ?? null;
+    if (!is_array($row)) {
+        json_response(['ok' => false, 'error' => 'Subscription not found'], 404);
+    }
+
+    // Store followed slugs in the subscription record
+    push_with_lock(static function () use ($endpoint, $followed): void {
+        $all = push_subscriptions_load();
+        $id = substr(sha1($endpoint), 0, 20);
+        if (isset($all[$id])) {
+            $all[$id]['followed'] = $followed;
+            push_subscriptions_save($all);
+        }
+    });
+
+    json_response(['ok' => true, 'followed' => count($followed)]);
+}
+
 json_response(['ok' => false, 'error' => 'Unknown action'], 404);
 
 function push_same_origin_request(): bool
