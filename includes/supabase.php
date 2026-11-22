@@ -577,6 +577,39 @@ function fetch_filter_facets(int $limit = 800): array
     ];
 }
 
+/**
+ * Trending products by click count (total clicks as proxy for popularity).
+ * Later we can add a daily_clicks table for true time-window trending.
+ *
+ * @param int $limit
+ * @param string $category Optional category filter
+ * @return list<array<string,mixed>>
+ */
+function fetch_trending_products(int $limit = 10, string $category = ''): array
+{
+    if (!supabase_is_configured()) {
+        return [];
+    }
+    $limit = max(1, min(24, $limit));
+
+    $query = 'select=*&is_active=eq.true&clicks=gt.0&order=clicks.desc&limit=' . $limit;
+    if ($category !== '' && in_array($category, PRODUCT_CATEGORIES, true)) {
+        $query .= '&category=eq.' . rawurlencode($category);
+    }
+
+    $result = supabase_request('GET', supabase_table() . '?' . $query . storefront_exclusion_query());
+    if (!$result['ok']) {
+        $result = supabase_request('GET', supabase_table() . '?' . $query);
+    }
+    if (!$result['ok'] || !is_array($result['data'])) {
+        return [];
+    }
+    $rows = is_array($result['data']) ? array_values(array_filter($result['data'], 'is_array')) : [];
+    return array_values(array_filter($rows, static function (array $product): bool {
+        return !is_blocked_product($product);
+    }));
+}
+
 /** @return array<string,mixed>|null */
 function find_product_by_slug(string $slug): ?array
 {

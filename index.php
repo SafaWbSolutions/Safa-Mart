@@ -110,9 +110,10 @@ if ($sort === 'deal_score' && $products && !$homeMixed) {
 }
 $hasMore = $homeMixed ? false : count($products) >= PRODUCTS_PER_PAGE;
 
-// Home page rails: curated spotlight + biggest-discount strip.
+// Home page rails: curated spotlight + biggest-discount strip + trending.
 $spotlightProducts = $hasFilters ? [] : fetch_spotlight_products(8);
 $bestOfferProducts = $hasFilters ? [] : fetch_best_offer_products(12, BEST_OFFER_MIN_DISCOUNT);
+$trendingProducts = $hasFilters ? [] : fetch_trending_products(12);
 $products = attach_featured_badges($products);
 $products = sort_featured_first($products);
 $dbProductCount = count($products);
@@ -649,6 +650,36 @@ if (SUPABASE_URL !== '') {
                     <?php endforeach; ?>
                 </div>
                 <button type="button" class="rail-arrow rail-next" data-rail-next aria-label="Scroll best offers right">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+            </div>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($trendingProducts): ?>
+        <section class="deal-rail-section rail-trending" aria-labelledby="trendingHeading">
+            <div class="rail-head">
+                <div class="rail-head-text">
+                    <h2 id="trendingHeading"><span aria-hidden="true">📈</span> Trending this week</h2>
+                    <p>Most clicked deals by other shoppers</p>
+                </div>
+                <div class="rail-head-actions">
+                    <a class="rail-link" href="<?= e(site_url('index.php?sort=deal_score')) ?>">
+                        View all trending
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="rail-shell">
+                <button type="button" class="rail-arrow rail-prev" data-rail-prev aria-label="Scroll trending left">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div class="deal-rail" data-rail>
+                    <?php foreach ($trendingProducts as $index => $railProduct): ?>
+                        <?= render_offer_rail_card($railProduct, $index + 1) ?>
+                    <?php endforeach; ?>
+                </div>
+                <button type="button" class="rail-arrow rail-next" data-rail-next aria-label="Scroll trending right">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                 </button>
             </div>
