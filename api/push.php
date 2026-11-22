@@ -106,6 +106,34 @@ if ($action === 'announce') {
     ]);
 }
 
+/**
+ * POST ?action=announce-drops — called by GitHub Actions to send the
+ * biggest tracked price drop. Uses the same secret as uploads.
+ */
+if ($action === 'announce-drops') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        json_response(['ok' => false, 'error' => 'POST required'], 405);
+    }
+    $secret = (string) ($_SERVER['HTTP_X_API_SECRET'] ?? '');
+    if (UPLOAD_API_SECRET === '' || $secret === '' || !hash_equals(UPLOAD_API_SECRET, $secret)) {
+        json_response(['ok' => false, 'error' => 'Unauthorized'], 401);
+    }
+    if (!push_is_configured()) {
+        json_response(['ok' => false, 'error' => 'Push is not configured on the server yet.'], 503);
+    }
+    if (!supabase_is_configured()) {
+        json_response(['ok' => false, 'error' => 'Catalogue is not configured.'], 503);
+    }
+
+    $result = push_announce_price_drops();
+
+    json_response([
+        'ok'     => true,
+        'action' => 'announce-drops',
+        'result' => $result,
+    ]);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     json_response(['ok' => false, 'error' => 'POST required'], 405);
 }

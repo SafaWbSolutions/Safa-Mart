@@ -384,6 +384,22 @@
     line-height: 1.6;
 }
 
+.history-chart {
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid #f1e6eb;
+    border-radius: 12px;
+    background: #fffafc;
+}
+
+.history-chart canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+    background: transparent;
+}
+
 @media (max-width: 720px) {
     .product-history { padding: 16px; border-radius: 16px; }
     .history-head h2 { font-size: 16px; }

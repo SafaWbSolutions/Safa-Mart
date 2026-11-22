@@ -829,6 +829,75 @@ function push_broadcast(string $category = '', int $limit = 0, array $payload = 
 }
 
 /**
+ * Price-drop payload: previous -> current price, real numbers only.
+ *
+ * @param array<string,mixed> $drop One row from fetch_recent_price_drops()
+ * @return array{title:string,body:string,url:string,image:string,tag:string}
+ */
+function push_price_drop_payload(array $drop): array
+{
+    $product = is_array($drop['product'] ?? null) ? $drop['product'] : [];
+    $name = truncate_text(clean_text((string) ($product['title'] ?? '')), 70);
+    if ($name === '') {
+        $name = 'a tracked deal';
+    }
+    $current = (float) ($drop['current'] ?? 0);
+    $previous = (float) ($drop['previous'] ?? 0);
+    $percent = (int) ($drop['drop_percent'] ?? 0);
+    $slug = trim((string) ($product['slug'] ?? ''));
+
+    $body = ($current > 0 && $previous > 0)
+        ? '₹' . inr_plain($previous) . ' → ₹' . inr_plain($current) . ($percent > 0 ? ' · ' . $percent . '% kam' : '')
+        : 'Price just dropped. Tap to see the live price.';
+
+    return [
+        'title' => truncate_text('📉 Price drop · ' . $name, 120),
+        'body'  => truncate_text($body, 180),
+        'url'   => $slug !== ''
+            ? site_url('product.php?slug=' . rawurlencode($slug))
+            : site_url('price-drops.php'),
+        'image' => (string) ($product['thumbnail_url'] ?? ''),
+        'tag'   => 'safa-drop-' . ($slug !== '' ? substr(sha1($slug), 0, 10) : 'latest'),
+    ];
+}
+
+/**
+ * One push burst per 6 hours for the biggest tracked price drop. Never
+ * repeats the same drop: the throttle file is the only gate, so a new drop
+ * always gets through once the window passes.
+ *
+ * @return array{sent:int,failed:int,removed:int,skipped:int}
+ */
+function push_announce_price_drops(): array
+{
+    $empty = ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => 0];
+    if (!push_is_configured() || !supabase_is_configured() || !function_exists('fetch_recent_price_drops')) {
+        return $empty;
+    }
+
+    $drops = fetch_recent_price_drops(8);
+    if (!$drops) {
+        return $empty;
+    }
+
+    $throttleFile = push_storage_path('push-last-drop.txt');
+    $last = is_file($throttleFile) ? (int) @file_get_contents($throttleFile) : 0;
+    if ($last > 0 && time() - $last < 21600) {
+        $empty['skipped'] = count($drops);
+        return $empty;
+    }
+    @file_put_contents($throttleFile, (string) time(), LOCK_EX);
+
+    $best = $drops[0];
+    if (!is_array($best)) {
+        return $empty;
+    }
+
+    $category = (string) (($best['product'] ?? [])['category'] ?? '');
+    return push_broadcast($category, 0, push_price_drop_payload($best));
+}
+
+/**
  * Turn freshly listed products into one push burst. Only the highest-discount
  * product is announced so users are not spammed, and its live price is sent
  * inside the encrypted payload.

@@ -900,6 +900,11 @@ if ($pushProducts && PUSH_AUTO_ANNOUNCE) {
         } catch (Throwable $pushError) {
             app_log('info', 'Deal alert broadcast skipped', ['error' => $pushError->getMessage()]);
         }
+        try {
+            push_announce_price_drops();
+        } catch (Throwable $pushError) {
+            app_log('info', 'Price drop broadcast skipped', ['error' => $pushError->getMessage()]);
+        }
     });
 }
 

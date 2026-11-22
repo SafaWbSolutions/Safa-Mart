@@ -722,6 +722,60 @@ $faqSchema = [
                 </div>
             </div>
             <p class="history-note">Prices are recorded when Safa Mart refreshes this listing. Marketplace prices can change at any time — confirm on <?= e($platform) ?> before buying.</p>
+            <?php if ($priceHistory && count($priceHistory) >= 2): ?>
+                <div class="history-chart" role="img" aria-label="Price trend over last <?= count($priceHistory) ?> checks">
+                    <canvas id="priceSparkline" width="400" height="120" aria-hidden="true"></canvas>
+                </div>
+                <script>
+                (function () {
+                    var data = <?= json_encode(array_map(static function (array $row): array {
+                        return ['price' => (float) $row['price'], 'date' => $row['recorded_at'] ?? ''];
+                    }, array_reverse($priceHistory)), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                    if (!data || data.length < 2) return;
+                    var canvas = document.getElementById('priceSparkline');
+                    if (!canvas) return;
+                    var ctx = canvas.getContext('2d');
+                    var dpr = window.devicePixelRatio || 1;
+                    var w = canvas.width = canvas.offsetWidth * dpr;
+                    var h = canvas.height = canvas.offsetHeight * dpr;
+                    ctx.scale(dpr, dpr);
+                    var cssW = canvas.offsetWidth;
+                    var cssH = canvas.offsetHeight;
+                    var prices = data.map(function (d) { return d.price; });
+                    var minP = Math.min.apply(null, prices);
+                    var maxP = Math.max.apply(null, prices);
+                    var range = maxP - minP || 1;
+                    ctx.strokeStyle = '#16a34a';
+                    ctx.lineWidth = 2;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.beginPath();
+                    data.forEach(function (d, i) {
+                        var x = (i / (data.length - 1)) * cssW;
+                        var y = cssH - ((d.price - minP) / range) * (cssH - 16) - 8;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+                    // current price dot
+                    var last = data[data.length - 1];
+                    var lx = cssW;
+                    var ly = cssH - ((last.price - minP) / range) * (cssH - 16) - 8;
+                    ctx.fillStyle = '#16a34a';
+                    ctx.beginPath();
+                    ctx.arc(lx, ly, 4, 0, 2 * Math.PI);
+                    ctx.fill();
+                    // lowest marker
+                    var lowest = data.reduce(function (a, b) { return a.price < b.price ? a : b; });
+                    var loX = (data.indexOf(lowest) / (data.length - 1)) * cssW;
+                    var loY = cssH - ((lowest.price - minP) / range) * (cssH - 16) - 8;
+                    ctx.fillStyle = '#dc2626';
+                    ctx.beginPath();
+                    ctx.arc(loX, loY, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                })();
+                </script>
+            <?php endif; ?>
         </section>
     <?php endif; ?>
 

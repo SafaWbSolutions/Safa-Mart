@@ -121,6 +121,29 @@ jobs:
           # A push failure must never fail the sync run.
           exit 0
 
+      # Price-drop push (separate 6h throttle; only runs when tracked drops exist).
+      - name: Announce price drops by push
+        if: success()
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          UPLOAD_API_SECRET: ${{ secrets.UPLOAD_API_SECRET }}
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$UPLOAD_API_SECRET" ]; then
+            echo "Price-drop push skipped: SITE_URL or UPLOAD_API_SECRET is missing."
+            exit 0
+          fi
+          base="${SITE_URL%/}"
+          code=$(curl -sS -o /tmp/safa-drop.json -w "%{http_code}" -X POST \
+            -H "X-Api-Secret: $UPLOAD_API_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{}' \
+            "$base/api/push.php?action=announce-drops" || echo "000")
+          echo "Price-drop push HTTP $code"
+          if [ -f /tmp/safa-drop.json ]; then
+            cat /tmp/safa-drop.json || true
+          fi
+          exit 0
+
       - name: Summarise sync result
         if: always()
         run: |
