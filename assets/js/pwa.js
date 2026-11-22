@@ -24,8 +24,12 @@
     var TOPIC_KEY = 'safa_topics_v1';
     var SYNC_KEY = 'safa_push_sync_v1';
     var DIGEST_KEY = 'safa_digest_v1';
+    var LANG_KEY = 'safa_lang_v1';
+    var FOLLOW_KEY = 'safa_followed_v1';
+
     var topics = loadTopics();
     var digestMode = loadDigestMode();
+    var lang = loadLang();
     var subscribed = false;
     var busy = false;
     var deferredPrompt = null;
@@ -62,13 +66,20 @@
         }
     }
 
-    function loadTopics() {
+    function loadLang() {
         try {
-            var raw = window.localStorage.getItem(TOPIC_KEY);
-            var parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed.filter(function (t) { return typeof t === 'string'; }) : [];
+            var raw = window.localStorage.getItem(LANG_KEY);
+            return raw === 'hi' ? 'hi' : 'en';
         } catch (error) {
-            return [];
+            return 'en';
+        }
+    }
+
+    function saveLang(langCode) {
+        try {
+            window.localStorage.setItem(LANG_KEY, langCode);
+        } catch (error) {
+            /* ignore */
         }
     }
 
@@ -104,6 +115,11 @@
         var digestRadios = document.querySelectorAll('input[name="safa-digest"]');
         digestRadios.forEach(function (radio) {
             radio.checked = (radio.value === digestMode);
+        });
+        // Language toggle buttons
+        var langBtns = document.querySelectorAll('.safa-pwa-lang-btn[data-lang]');
+        langBtns.forEach(function (btn) {
+            btn.setAttribute('aria-pressed', btn.getAttribute('data-lang') === lang ? 'true' : 'false');
         });
 
         if (dot) {
@@ -212,7 +228,8 @@
         return post('subscribe', {
             subscription: subscription.toJSON(),
             topics: topics,
-            digest_mode: digestMode
+            digest_mode: digestMode,
+            lang: lang
         }).then(function () {
             try {
                 window.localStorage.setItem(SYNC_KEY, String(Date.now()));
@@ -258,7 +275,9 @@
                 }).then(function (subscription) {
                     return post('subscribe', {
                         subscription: subscription.toJSON(),
-                        topics: topics
+                        topics: topics,
+                        digest_mode: digestMode,
+                        lang: lang
                     }).then(function (result) {
                         if (!result || !result.ok) {
                             throw new Error((result && result.error) || 'subscribe-failed');
@@ -416,7 +435,7 @@
         } else if (isStandalone) {
             setStatus('Safa Mart is already installed. 🎉', 'ok');
         } else {
-            setStatus('Open your browser menu and choose “Install app” or “Add to Home screen”.', 'warn');
+            setStatus('Open your browser menu and choose "Install app" or "Add to Home screen".', 'warn');
         }
     }
 
@@ -487,6 +506,76 @@
         });
     });
 
+    // Language toggle buttons
+    var langBtns = document.querySelectorAll('.safa-pwa-lang-btn[data-lang]');
+    langBtns.forEach(function (btn) {
+        btn.setAttribute('aria-pressed', btn.getAttribute('data-lang') === lang ? 'true' : 'false');
+        btn.addEventListener('click', function () {
+            var newLang = this.getAttribute('data-lang');
+            if (newLang === lang) return;
+            lang = newLang;
+            saveLang(lang);
+            langBtns.forEach(function (b) {
+                b.setAttribute('aria-pressed', b.getAttribute('data-lang') === lang ? 'true' : 'false');
+            });
+            applyLanguage(lang);
+            if (subscribed) {
+                currentSubscription().then(syncTopicsToServer).catch(function () { /* ignore */ });
+            }
+            setStatus('Language: ' + (lang === 'hi' ? 'हिंदी (Hinglish)' : 'English'), 'ok');
+        });
+    });
+
+    function applyLanguage(langCode) {
+        var isHindi = langCode === 'hi';
+        // Update UI text based on language
+        var elements = {
+            'safaPwaTitle': isHindi ? 'कभी असली डील मिस न करें' : 'Never miss a real deal',
+            'safaPwaCopy': isHindi ? 'असली प्राइस ड्रॉप या नया बेस्ट ऑफर आने पर एक छोटा पिंग मिलेगा — हर प्रोडक्ट के लिए नहीं।' : 'Get one short ping when a genuine price drop or a new best offer goes live — not for every product.',
+            'safaPwaEnable span': isHindi ? 'अलर्ट चालू करें' : 'Enable alerts',
+            'safaPwaTest': isHindi ? 'टेस्ट भेजें' : 'Send test',
+            'safaPwaDisable': isHindi ? 'अलर्ट बंद करें' : 'Turn off alerts',
+            'safaPwaIos': isHindi ? 'iPhone पर, पहले <strong>Share → Add to Home Screen</strong> टैप करें, फिर नए आइकन से Safa Mart खोलें अलर्ट चालू करने के लिए।' : 'On iPhone, first tap <strong>Share → Add to Home Screen</strong>, then open Safa Mart from the new icon to turn on alerts.',
+            'safaPwaInstallRow button': isHindi ? 'ऐप इंस्टॉल करें' : 'Install app',
+            'safaPwaInstallRow small': isHindi ? 'होम-स्क्रीन शॉर्टकट, तेज़ लोड, ऑफलाइन काम करता है।' : 'Home-screen shortcut, faster loads, works offline.',
+            'safaPwaNote': isHindi ? 'कोई अकाउंट नहीं, कोई स्पैम नहीं। प्राथमिकताएँ इस डिवाइस पर ही रहती हैं। <a href="' + config.siteUrl + '/guides/">गाइड देखें</a>' : 'No account, no spam. Preferences live on this device only. <a href="' + config.siteUrl + '/guides/">Browse guides</a>',
+        };
+
+        for (var id in elements) {
+            var el = document.getElementById(id) || document.querySelector(id);
+            if (el) {
+                el.innerHTML = elements[id];
+            }
+        }
+
+        // Update digest radio labels
+        var digestLabels = {
+            'instant': isHindi ? 'तुरंत' : 'Instant',
+            'instant_desc': isHindi ? 'डील आते ही तुरंत पिंग करें' : 'Ping immediately when a deal drops',
+            'daily': isHindi ? 'दैनिक डाइजेस्ट (सुबह 9 बजे)' : 'Daily digest (9 AM)',
+            'daily_desc': isHindi ? 'हर सुबह एक समरी नोटिफिकेशन' : 'One summary notification each morning',
+        };
+        var instantRadio = document.querySelector('input[name="safa-digest"][value="instant"]');
+        var dailyRadio = document.querySelector('input[name="safa-digest"][value="daily"]');
+        if (instantRadio) instantRadio.parentElement.querySelector('.safa-pwa-digest-label strong').textContent = digestLabels.instant;
+        if (instantRadio) instantRadio.parentElement.querySelector('.safa-pwa-digest-label span').textContent = digestLabels.instant_desc;
+        if (dailyRadio) dailyRadio.parentElement.querySelector('.safa-pwa-digest-label strong').textContent = digestLabels.daily;
+        if (dailyRadio) dailyRadio.parentElement.querySelector('.safa-pwa-digest-label span').textContent = digestLabels.daily_desc;
+
+        // Update lang button states
+        document.querySelectorAll('.safa-pwa-lang-btn[data-lang]').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', btn.getAttribute('data-lang') === langCode ? 'true' : 'false');
+        });
+
+        // Update digest mode radio checked state
+        document.querySelectorAll('input[name="safa-digest"]').forEach(function (r) {
+            r.checked = (r.value === digestMode);
+        });
+    }
+
+    // Initialize language on load
+    applyLanguage(lang);
+
     Array.prototype.forEach.call(document.querySelectorAll('[data-safa-install]'), function (button) {
         button.addEventListener('click', function (event) {
             event.preventDefault();
@@ -543,7 +632,9 @@
             syncUI();
             return post('subscribe', {
                 subscription: subscription.toJSON(),
-                topics: topics
+                topics: topics,
+                digest_mode: digestMode,
+                lang: lang
             }).then(function (result) {
                 if (result && result.ok) {
                     try {
@@ -617,6 +708,7 @@
                     }).catch(function () { /* ignore */ });
                 }
             });
+        }
     }
 
     // Initialize follow buttons on page load
