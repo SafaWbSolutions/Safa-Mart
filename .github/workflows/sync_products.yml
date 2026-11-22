@@ -4,6 +4,13 @@ on:
   schedule:
     # Every 4 hours, at minute 0 (UTC).
     - cron: "0 */4 * * *"
+  # Scraper/category changes should fix the catalogue immediately instead of
+  # waiting for the next 4-hour slot.
+  push:
+    branches: [main]
+    paths:
+      - "automation/**"
+      - ".github/workflows/sync_products.yml"
   workflow_dispatch:
     inputs:
       max_products:
@@ -45,7 +52,7 @@ jobs:
       # Route merchant fetches through the Indian web server; GitHub runners
       # are outside India and Myntra serves them a page with no product links.
       FETCH_PROXY_URL: ${{ secrets.SITE_URL }}/api/feed.php
-      MAX_PRODUCTS: ${{ github.event.inputs.max_products || '30' }}
+      MAX_PRODUCTS: ${{ github.event.inputs.max_products || '60' }}
       PRODUCTS_PER_FEED: "10"
       STOCK_CHECK_LIMIT: "50"
       SKIP_STOCK_CHECK: ${{ github.event.inputs.skip_stock_check || 'true' }}
