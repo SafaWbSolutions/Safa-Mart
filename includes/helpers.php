@@ -352,13 +352,153 @@ function inr($amount, bool $forceDecimals = false): string
 
 function clean_search_term(string $term): string
 {
-    $term = preg_replace('/[^\p{L}\p{N}\s\-]+/u', ' ', $term) ?? '';
+    // Keep letters, combining marks (Devanagari matras), numbers, spaces and
+    // hyphens. Marks matter for Hindi words like "जूता".
+    $term = preg_replace('/[^\p{L}\p{M}\p{N}\s\-]+/u', ' ', $term) ?? '';
     $term = preg_replace('/\s+/u', ' ', $term) ?? '';
     $term = trim($term);
     if (function_exists('mb_substr')) {
         return mb_substr($term, 0, 60, 'UTF-8');
     }
     return substr($term, 0, 60);
+}
+
+/**
+ * Expand a search term into fuzzy variations for smarter matching.
+ * Uses pg_trgm-friendly patterns: stems, plurals, common synonyms.
+ *
+ * @return list<string> unique expanded terms (original first)
+ */
+function expand_search_terms(string $term): array
+{
+    $term = clean_search_term($term);
+    if ($term === '') {
+        return [];
+    }
+
+    $terms = [$term];
+    $lower = mb_strtolower($term);
+
+    // Simple English plural/singular rules (safe, no garbage variants)
+    $plurals = [];
+    $singulars = [];
+
+    if (preg_match('/^(.{2,})ies$/u', $lower, $m)) {
+        $singulars[] = $m[1] . 'y';
+    } elseif (preg_match('/^(.{2,})oes$/u', $lower, $m)) {
+        $singulars[] = $m[1] . 'oe';
+    } elseif (preg_match('/^(.{2,})(ches|shes|sses|xes|zes)$/u', $lower, $m)) {
+        $singulars[] = $m[1] . substr($m[2], 0, -2);
+    } elseif (preg_match('/^(.{2,}[^s])s$/u', $lower, $m)) {
+        $singulars[] = $m[1];
+    }
+
+    $hasDevanagari = (bool) preg_match('/\p{Devanagari}/u', $term);
+
+    if (!$hasDevanagari) {
+        if (preg_match('/^(.{2,}[^aeiou])y$/u', $lower, $m)) {
+            $plurals[] = $m[1] . 'ies';
+        } elseif (preg_match('/es$/u', $lower)) {
+            // Already looks plural (shoes, watches): keep as-is.
+        } elseif (preg_match('/^(.{2,}(?:s|x|z|ch|sh))$/u', $lower)) {
+            $plurals[] = $lower . 'es';
+        } else {
+            $plurals[] = $lower . 's';
+        }
+    }
+
+    foreach ($singulars as $s) {
+        $s = trim($s);
+        if (mb_strlen($s) >= 3 && $s !== $lower && !in_array($s, $terms, true)) {
+            $terms[] = $s;
+        }
+    }
+    foreach ($plurals as $p) {
+        $p = trim($p);
+        if (mb_strlen($p) >= 3 && $p !== $lower && !in_array($p, $terms, true)) {
+            $terms[] = $p;
+        }
+    }
+
+    // Common synonyms / variations for Indian e-commerce
+    $synonyms = [
+        'shoe'   => ['shoes', 'sneaker', 'sneakers', 'footwear', 'chappal', 'sandal', 'sandals'],
+        'shoes'  => ['shoe', 'sneaker', 'sneakers', 'footwear', 'chappal', 'sandal', 'sandals'],
+        'sneaker'=> ['sneakers', 'shoe', 'shoes', 'running'],
+        'sneakers'=> ['sneaker', 'shoe', 'shoes', 'running'],
+        'mobile' => ['phone', 'smartphone', 'handset'],
+        'phone'  => ['mobile', 'smartphone', 'handset'],
+        'laptop' => ['notebook', 'macbook'],
+        'watch'  => ['watches', 'smartwatch', 'timepiece'],
+        'watches'=> ['watch', 'smartwatch', 'timepiece'],
+        'shirt'  => ['shirts', 't-shirt', 'tshirt'],
+        'shirts' => ['shirt', 't-shirt', 'tshirt'],
+        'tshirt' => ['t-shirt', 't shirt', 'shirt'],
+        't-shirt'=> ['tshirt', 't shirt', 'shirt'],
+        'kurta'  => ['kurtas', 'kurti', 'kurtis'],
+        'kurti'  => ['kurtis', 'kurta', 'kurtas'],
+        'saree'  => ['sari', 'sarees', 'saris'],
+        'sari'   => ['saree', 'sarees', 'saris'],
+        'dress'  => ['dresses', 'gown', 'frock'],
+        'jeans'  => ['jean', 'denim', 'pants'],
+        'pant'   => ['pants', 'trouser', 'trousers', 'bottom'],
+        'pants'  => ['pant', 'trouser', 'trousers', 'bottom'],
+        'bag'    => ['bags', 'handbag', 'backpack', 'purse'],
+        'bags'   => ['bag', 'handbag', 'backpack', 'purse'],
+        'earbud' => ['earbuds', 'earphone', 'earphones', 'headphone', 'headphones'],
+        'earbuds'=> ['earbud', 'earphone', 'earphones', 'headphone', 'headphones'],
+        'headphone'=> ['headphones', 'earphone', 'earphones', 'earbud', 'earbuds'],
+        'headphones'=> ['headphone', 'earphone', 'earphones', 'earbud', 'earbuds'],
+        'perfume'=> ['fragrance', 'scent', 'eau de parfum', 'deo', 'deodorant'],
+        'deo'    => ['deodorant', 'perfume', 'fragrance', 'body spray'],
+        'cream'  => ['creams', 'lotion', 'moisturizer'],
+        'lotion' => ['lotions', 'cream', 'moisturizer'],
+        'bagpack'=> ['backpack', 'bag', 'rucksack'],
+        'backpack'=> ['bagpack', 'bag', 'rucksack'],
+        'wallet' => ['wallets', 'purse', 'cardholder'],
+        'sunglass'=> ['sunglasses', 'goggles', 'shades', 'eyewear'],
+        'sunglasses'=> ['sunglass', 'goggles', 'shades', 'eyewear'],
+        'cap'    => ['caps', 'hat', 'hats'],
+    ];
+
+    if (isset($synonyms[$lower])) {
+        foreach ($synonyms[$lower] as $syn) {
+            if (!in_array($syn, $terms, true)) {
+                $terms[] = $syn;
+            }
+        }
+    }
+
+    // Hinglish variations (Devanagari → rough ASCII)
+    // Check if term contains Devanagari characters
+    if (preg_match('/\p{Devanagari}/u', $term)) {
+        $hinglish = [
+            'जूता'   => ['juta', 'joota', 'shoe', 'shoes'],
+            'जूते'   => ['jute', 'joote', 'shoe', 'shoes'],
+            'मोबाइल' => ['mobile', 'phone'],
+            'कपड़ा'   => ['kapda', 'cloth', 'fabric'],
+            'शर्ट'    => ['shirt', 'shirts'],
+            'जूती'    => ['juti', 'jutti', 'mojari'],
+            'साड़ी'    => ['saree', 'sari'],
+            'कुर्ता'   => ['kurta', 'kurtas'],
+            'बैग'     => ['bag', 'bags'],
+            'घड़ी'    => ['ghadi', 'watch'],
+            'चप्पल'   => ['chappal', 'sandal'],
+        ];
+
+        foreach ($hinglish as $key => $vals) {
+            if (mb_stripos($term, $key) !== false) {
+                foreach ($vals as $v) {
+                    if (!in_array($v, $terms, true)) {
+                        $terms[] = $v;
+                    }
+                }
+            }
+        }
+    }
+
+    // Unique, keep original first
+    return array_values(array_unique($terms));
 }
 
 function slugify_title(string $title): string

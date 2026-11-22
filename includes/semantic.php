@@ -287,7 +287,7 @@ function semantic_search_products(string $query, int $limit = 12, array $exclude
                 $score += $weight * $queryVector[$dim];
             }
         }
-        if ($score < 0.03) {
+        if ($score < 0.10) {
             continue;
         }
 

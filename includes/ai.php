@@ -131,7 +131,7 @@ function builtin_query_expansion(string $query): array
         'shoe'     => ['shoes', 'sneakers', 'sandals'],
         'shoes'    => ['sneakers', 'sandals', 'footwear'],
         'shirt'    => ['shirts', 't-shirt'],
-        'tshirt'   => ['t-shirt', 'tee'],
+        'tshirt'   => ['t-shirt', 'shirt'],
         'jeans'    => ['denim', 'trousers'],
         'dress'    => ['dresses', 'gown'],
         'top'      => ['tops', 'blouse'],

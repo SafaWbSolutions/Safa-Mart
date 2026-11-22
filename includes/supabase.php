@@ -258,28 +258,36 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
     }
     $search = clean_search_term((string) ($filters['q'] ?? ''));
     $searchTerms = [];
+    // Expand the main search term with fuzzy variations (plurals, synonyms, hinglish)
+    if ($search !== '') {
+        foreach (expand_search_terms($search) as $expanded) {
+            $searchTerms[$expanded] = true;
+            if (count($searchTerms) >= 12) {
+                break;
+            }
+        }
+    }
+    // Also include any AI-expanded terms (from ai_expand_query)
     foreach ((array) ($filters['q_terms'] ?? []) as $term) {
         $term = clean_search_term((string) $term);
         if ($term === '') {
             continue;
         }
         $searchTerms[$term] = true;
-        if (count($searchTerms) >= 7) {
+        if (count($searchTerms) >= 12) {
             break;
         }
-    }
-    if (!$searchTerms && $search !== '') {
-        $searchTerms[$search] = true;
     }
     $searchTerms = array_keys($searchTerms);
     if ($searchTerms) {
         $ors = [];
         foreach ($searchTerms as $term) {
             $pattern = rawurlencode('*' . $term . '*');
+            // Search product identity only. Platform/category matching made
+            // short words ("sho") match every Shopsy row.
             $ors[] = 'title.ilike.' . $pattern;
-            $ors[] = 'category.ilike.' . $pattern;
-            $ors[] = 'source_platform.ilike.' . $pattern;
             $ors[] = 'brand.ilike.' . $pattern;
+            $ors[] = 'category.ilike.' . $pattern;
         }
         $query .= '&or=(' . implode(',', $ors) . ')';
     }
@@ -352,9 +360,26 @@ function fetch_storefront_products(array $filters = [], int $limit = PRODUCTS_PE
         return [];
     }
     $rows = is_array($result['data']) ? array_values(array_filter($result['data'], 'is_array')) : [];
-    return array_values(array_filter($rows, static function (array $product): bool {
+    $rows = array_values(array_filter($rows, static function (array $product): bool {
         return !is_blocked_product($product);
     }));
+
+    // Drop exact duplicate listings (same title + store) created by repeated
+    // feed upserts with slightly different URLs.
+    $deduped = [];
+    $seenKeys = [];
+    foreach ($rows as $product) {
+        $key = strtolower(trim((string) ($product['title'] ?? '')))
+            . '|' . strtolower(trim((string) ($product['source_platform'] ?? '')));
+        if ($key !== '|') {
+            if (isset($seenKeys[$key])) {
+                continue;
+            }
+            $seenKeys[$key] = true;
+        }
+        $deduped[] = $product;
+    }
+    return $deduped;
 }
 
 /**
