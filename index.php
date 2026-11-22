@@ -62,6 +62,8 @@ if ($searchQuery !== '' && count($products) < 6) {
 
 // Semantic fill: typos and word variants ("kurti", "sneeker") that SQL ILIKE
 // cannot catch. Keyword results stay first; vectors only fill the empty slots.
+// With zero keyword hits the bar is much higher, so an unrelated category
+// ("watch" -> kurta) is never shown as a match.
 if ($searchQuery !== '' && count($products) < PRODUCTS_PER_PAGE) {
     $seenIds = [];
     foreach ($products as $seenProduct) {
@@ -70,7 +72,8 @@ if ($searchQuery !== '' && count($products) < PRODUCTS_PER_PAGE) {
     $semanticRows = semantic_search_products(
         $searchQuery,
         PRODUCTS_PER_PAGE - count($products),
-        $seenIds
+        $seenIds,
+        count($products) === 0 ? 0.35 : 0.10
     );
     if ($semanticRows) {
         $products = array_merge($products, $semanticRows);

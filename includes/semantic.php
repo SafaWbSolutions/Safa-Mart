@@ -238,13 +238,14 @@ function semantic_query_tokens(string $query): array
  * @param list<int> $excludeIds
  * @return list<array<string,mixed>> Product rows ready for render_product_card().
  */
-function semantic_search_products(string $query, int $limit = 12, array $excludeIds = []): array
+function semantic_search_products(string $query, int $limit = 12, array $excludeIds = [], float $minScore = 0.10): array
 {
     $query = clean_search_term($query);
     if ($query === '') {
         return [];
     }
     $limit = max(1, min(24, $limit));
+    $minScore = max(0.03, min(0.9, $minScore));
 
     $pool = recommendation_pool();
     $index = semantic_index();
@@ -287,7 +288,7 @@ function semantic_search_products(string $query, int $limit = 12, array $exclude
                 $score += $weight * $queryVector[$dim];
             }
         }
-        if ($score < 0.10) {
+        if ($score < $minScore) {
             continue;
         }
 
