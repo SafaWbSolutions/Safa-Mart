@@ -402,6 +402,131 @@ def discount_percent(mrp: float, price: float) -> int:
     return max(0, min(99, int(round(((mrp - price) / mrp) * 100))))
 
 
+# Category average price benchmarks (updated periodically)
+# Used for fake MRP detection: if MRP > 3x category avg, flag as suspicious
+CATEGORY_AVG_PRICE = {
+    "Fashion": 1200,
+    "Electronics": 8000,
+    "Home & Kitchen": 1500,
+    "Grocery": 300,
+    "Beauty": 800,
+    "Footwear": 2000,
+    "Accessories": 1500,
+    "Other": 2000,
+}
+
+# Known junk image patterns (logos, placeholders, etc.)
+JUNK_IMAGE_PATTERNS = [
+    r"logo",
+    r"placeholder",
+    r"default",
+    r"no.image",
+    r"no-image",
+    r"unavailable",
+    r"coming.soon",
+    r"coming-soon",
+    r"image.not.found",
+    r"image-not-found",
+    r"404",
+    r"blank",
+    r"transparent",
+    r"1x1",
+    r"pixel",
+    r"icon",
+    r"sprite",
+    r"banner",
+    r"advertisement",
+    r"promo",
+    r"offer.banner",
+]
+
+# Maximum allowed MRP multiplier over price (beyond this = fake MRP)
+MAX_MRP_MULTIPLIER = 5.0
+# Maximum allowed MRP vs category average (beyond this = fake MRP)
+MAX_MRP_VS_CATEGORY_AVG = 3.0
+
+
+def is_junk_image(url: str) -> bool:
+    """Check if image URL matches known junk/placeholder patterns."""
+    lower = url.lower()
+    for pattern in JUNK_IMAGE_PATTERNS:
+        if re.search(pattern, lower):
+            return True
+    # Very small images (likely tracking pixels)
+    if re.search(r"/(\d{1,2})x(\d{1,2})(?:/|\?|$)", lower):
+        # Extract dimensions
+        m = re.search(r"/(\d{1,2})x(\d{1,2})", lower)
+        if m:
+            w, h = int(m.group(1)), int(m.group(2))
+            if w <= 50 and h <= 50:
+                return True
+    return False
+
+
+def validate_product_quality(
+    metadata: dict[str, Any],
+    price: float,
+    mrp: float,
+    discount: int,
+) -> dict[str, Any]:
+    """Validate product quality and return {ok: bool, reason: str}.
+
+    Checks:
+    1. Fake MRP: MRP > 5x price OR MRP > 3x category average
+    2. Suspicious discount: discount > 95% with high MRP
+    3. Junk images: logo, placeholder, pixel, etc.
+    4. Title quality: too short, generic, or spammy
+    5. Price sanity: price > 0, not absurdly high
+    """
+    title = metadata.get("title", "") or ""
+    images = metadata.get("images", []) or []
+    category = metadata.get("category_hint", "") or ""
+
+    # 1. Fake MRP detection
+    if price > 0:
+        mrp_multiplier = mrp / price if price > 0 else 0
+        if mrp_multiplier > MAX_MRP_MULTIPLIER:
+            return {"ok": False, "reason": f"fake_mrp: MRP {mrp_multiplier:.1f}x price"}
+
+        cat_avg = CATEGORY_AVG_PRICE.get(category, CATEGORY_AVG_PRICE["Other"])
+        if mrp > cat_avg * MAX_MRP_VS_CATEGORY_AVG and mrp > price * 2:
+            return {"ok": False, "reason": f"fake_mrp: MRP {mrp:.0f} >> category avg {cat_avg:.0f}"}
+
+    # 2. Suspicious discount with high MRP
+    if discount > 90 and mrp > 10000:
+        return {"ok": False, "reason": f"suspicious_discount: {discount}% off on high MRP"}
+
+    # 3. Junk image detection
+    if images:
+        junk_count = sum(1 for img in images if is_junk_image(img))
+        if junk_count >= len(images) * 0.5:  # More than half are junk
+            return {"ok": False, "reason": f"junk_images: {junk_count}/{len(images)} suspicious"}
+
+    # 4. Title quality
+    if title:
+        title_lower = title.lower()
+        # Too short
+        if len(title) < 10:
+            return {"ok": False, "reason": "short_title"}
+        # Generic spammy titles
+        spam_patterns = [
+            r"^best\s+(?:deal|offer|price)",
+            r"^(?:buy|shop|get)\s+now",
+            r"(?:deal|offer)\s+(?:of|for)\s+the\s+day",
+            r"^\d+\s*%\s*off",
+            r"limited\s+time",
+        ]
+        for pattern in spam_patterns:
+            if re.search(pattern, title_lower):
+                return {"ok": False, "reason": "spammy_title"}
+
+    # 5. Price sanity
+    if price <= 0 or price > 500000:
+        return {"ok": False, "reason": "absurd_price"}
+
+    return {"ok": True, "reason": ""}
+
+
 def host_of(url: str) -> str:
     try:
         return (urlsplit(url).hostname or "").lower().rstrip(".")
@@ -1830,6 +1955,11 @@ def build_product_payload(
         raise ScrapeError("No INR price found on the product page.")
     if not metadata["images"]:
         raise ScrapeError("No product image found.")
+
+    # Auto-hide bad deals: fake MRP, junk images, suspicious patterns
+    validation = validate_product_quality(metadata, price, mrp, discount)
+    if not validation["ok"]:
+        raise ScrapeError(f"Auto-hidden: {validation['reason']}")
 
     canonical = canonicalize_url(metadata.get("canonical_url") or product_url)
     if not is_supported_product_url(canonical) or detect_platform(canonical) != detect_platform(product_url):
