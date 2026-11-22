@@ -191,9 +191,15 @@ if ($action === 'test') {
     }
 
     $payload = push_default_payload();
+    // Preserve extra fields from push_payload_for_product, only override test-specific ones
     $payload['title'] = 'Safa Mart test alert';
     $payload['body'] = 'Alerts are working on this device. New deals will arrive like this.';
     $payload['tag'] = 'safa-test';
+    // Add test-specific discount/price for rich notification
+    $payload['discount'] = 50;
+    $payload['price'] = 499;
+    $payload['mrp'] = 999;
+    $payload['platform'] = 'Test';
 
     $result = push_send_one(
         $endpoint,

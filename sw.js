@@ -121,17 +121,55 @@ self.addEventListener('fetch', (event) => {
 function showDealNotification(data) {
     const notification = data || {};
     const title = notification.title || 'New deal on Safa Mart';
+    const body = notification.body || 'Fresh offers just landed. Tap to see today\'s best prices.';
+    const image = notification.image || '/assets/icons/icon-512.png';
+    const icon = '/assets/icons/icon-192.png';
+    const badge = '/assets/icons/favicon-96.png';
+    const tag = notification.tag || 'safa-deal';
+    const url = notification.url || '/';
+    const discount = notification.discount || null;
+    const price = notification.price || null;
+    const mrp = notification.mrp || null;
+    const platform = notification.platform || null;
+
+    // Build a richer body with structured info
+    let richBody = body;
+    const infoParts = [];
+    if (discount && discount > 0) {
+        infoParts.push(`🔥 ${discount}% OFF`);
+    }
+    if (price && price > 0) {
+        infoParts.push(`💰 ₹${price}`);
+    }
+    if (mrp && mrp > price && price > 0) {
+        infoParts.push(`~~₹${mrp}~~`);
+    }
+    if (platform) {
+        infoParts.push(`🏪 ${platform}`);
+    }
+    if (infoParts.length > 0) {
+        richBody = infoParts.join(' · ') + '\n' + body;
+    }
+
     const options = {
-        body: notification.body || 'Fresh offers just landed. Tap to see today\'s best prices.',
-        icon: '/assets/icons/icon-192.png',
-        badge: '/assets/icons/favicon-96.png',
-        image: notification.image || undefined,
-        tag: notification.tag || 'safa-deal',
+        body: richBody,
+        icon: icon,
+        badge: badge,
+        image: image,
+        tag: tag,
         renotify: true,
-        data: { url: notification.url || '/' },
-        vibrate: [90, 40, 90],
-        actions: [{ action: 'open', title: 'See deal' }]
+        data: { url: url },
+        vibrate: [100, 50, 100, 50, 100],
+        requireInteraction: true,
+        silent: false,
+        actions: [
+            { action: 'open', title: '🛍️ View Deal' },
+            { action: 'dismiss', title: '✕ Dismiss' }
+        ],
+        dir: 'ltr',
+        lang: 'en-IN',
     };
+
     return self.registration.showNotification(title, options);
 }
 
@@ -178,15 +216,28 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const target = (event.notification.data && event.notification.data.url) || '/';
+    const action = event.action || 'open';
+
+    // If user clicked an action button (not the notification body), handle it
+    if (action !== 'open') {
+        // For custom actions, still open the URL
+        event.waitUntil(self.clients.openWindow(target));
+        return;
+    }
 
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            // First, try to find an existing Safa Mart tab and focus it
             for (const client of clientList) {
-                if ('focus' in client) {
+                const clientUrl = new URL(client.url, self.location.origin);
+                const targetUrl = new URL(target, self.location.origin);
+                // If same origin, navigate that tab
+                if (clientUrl.origin === targetUrl.origin) {
                     client.navigate(target).catch(() => undefined);
                     return client.focus();
                 }
             }
+            // No existing tab found, open a new window
             if (self.clients.openWindow) {
                 return self.clients.openWindow(target);
             }

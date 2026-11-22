@@ -574,7 +574,7 @@ function push_stats(): array
  * no invented urgency and no fake discounts.
  *
  * @param array<string,mixed> $product
- * @return array{title:string,body:string,url:string,image:string,tag:string}
+ * @return array{title:string,body:string,url:string,image:string,tag:string,discount:int,price:float,mrp:float,platform:string}
  */
 function push_payload_for_product(array $product): array
 {
@@ -618,11 +618,15 @@ function push_payload_for_product(array $product): array
         : 'New deal · ' . $name;
 
     return [
-        'title' => truncate_text($title, 120),
-        'body'  => truncate_text($body, 180),
-        'url'   => $url,
-        'image' => $image,
-        'tag'   => 'safa-deal-' . ($slug !== '' ? substr(sha1($slug), 0, 10) : 'new'),
+        'title'      => truncate_text($title, 120),
+        'body'       => truncate_text($body, 180),
+        'url'        => $url,
+        'image'      => $image,
+        'tag'        => 'safa-deal-' . ($slug !== '' ? substr(sha1($slug), 0, 10) : 'new'),
+        'discount'   => $discount,
+        'price'      => $price,
+        'mrp'        => $mrp,
+        'platform'   => trim((string) ($product['source_platform'] ?? '')),
     ];
 }
 
@@ -832,7 +836,7 @@ function push_broadcast(string $category = '', int $limit = 0, array $payload = 
  * Price-drop payload: previous -> current price, real numbers only.
  *
  * @param array<string,mixed> $drop One row from fetch_recent_price_drops()
- * @return array{title:string,body:string,url:string,image:string,tag:string}
+ * @return array{title:string,body:string,url:string,image:string,tag:string,discount:int,price:float,mrp:float,platform:string}
  */
 function push_price_drop_payload(array $drop): array
 {
@@ -851,13 +855,17 @@ function push_price_drop_payload(array $drop): array
         : 'Price just dropped. Tap to see the live price.';
 
     return [
-        'title' => truncate_text('📉 Price drop · ' . $name, 120),
-        'body'  => truncate_text($body, 180),
-        'url'   => $slug !== ''
+        'title'      => truncate_text('📉 Price drop · ' . $name, 120),
+        'body'       => truncate_text($body, 180),
+        'url'        => $slug !== ''
             ? site_url('product.php?slug=' . rawurlencode($slug))
             : site_url('price-drops.php'),
-        'image' => (string) ($product['thumbnail_url'] ?? ''),
-        'tag'   => 'safa-drop-' . ($slug !== '' ? substr(sha1($slug), 0, 10) : 'latest'),
+        'image'      => (string) ($product['thumbnail_url'] ?? ''),
+        'tag'        => 'safa-drop-' . ($slug !== '' ? substr(sha1($slug), 0, 10) : 'latest'),
+        'discount'   => $percent,
+        'price'      => $current,
+        'mrp'        => $previous,
+        'platform'   => trim((string) ($product['source_platform'] ?? '')),
     ];
 }
 
