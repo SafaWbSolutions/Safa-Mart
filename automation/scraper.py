@@ -17,6 +17,7 @@ import ipaddress
 import json
 import logging
 import os
+import math
 import random
 import re
 import socket
@@ -1442,6 +1443,26 @@ class SupabaseClient:
 
         return checked, updated
 
+    def fetch_clicks_per_category(self) -> dict[str, int]:
+        """Return total clicks per category for active products."""
+        path = (
+            f"{self.table}?select=category,clicks"
+            f"&is_active=eq.true&clicks=gt.0"
+        )
+        try:
+            data = self._request("GET", path).json()
+        except (ScrapeError, ValueError) as error:
+            LOGGER.info("Click stats fetch skipped: %s", error)
+            return {}
+        rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+        clicks_per_cat: dict[str, int] = {}
+        for row in rows:
+            cat = str(row.get("category") or "").strip()
+            clicks = int(row.get("clicks") or 0)
+            if cat and clicks > 0:
+                clicks_per_cat[cat] = clicks_per_cat.get(cat, 0) + clicks
+        return clicks_per_cat
+
     def close(self) -> None:
         self.session.close()
 
@@ -2041,23 +2062,36 @@ def deal_decision(
     return "skip_no_drop"
 
 
-def round_robin_links(batches: list[tuple[str, list[str]]]) -> Iterable[tuple[str, str]]:
-    """Yield (link, category hint) taking one link from each feed per round.
+def weighted_round_robin_links(
+    batches: list[tuple[str, list[str]]],
+    clicks_per_category: dict[str, int],
+) -> Iterable[tuple[str, str]]:
+    """Yield (link, category hint) with weighted round-robin based on clicks.
 
-    Fashion collections often expose hundreds of links, so a plain feed-by-feed
-    loop spends the whole MAX_PRODUCTS budget before the home/kitchen feed is
-    ever touched. Round-robin keeps every category represented.
+    Categories with more clicks get proportionally more links per round.
+    Minimum weight of 1 ensures zero-click categories still get some budget.
     """
-    queues = [(hint, list(links)) for hint, links in batches if links]
+    # Compute weight per category (1 + log(clicks+1)) for smooth scaling
+    weights = {}
+    max_clicks = max(clicks_per_category.values()) if clicks_per_category else 1
+    for cat, clicks in clicks_per_category.items():
+        # Log scale: 1 click -> 1, 10 -> 2, 100 -> 3, etc.
+        weights[cat] = 1.0 + (clicks / max_clicks) if max_clicks > 0 else 1.0
+
+    queues = [(hint, list(links), weights.get(hint, 1.0)) for hint, links in batches if links]
     while queues:
-        remaining: list[tuple[str, list[str]]] = []
-        for hint, links in queues:
+        remaining: list[tuple[str, list[str], float]] = []
+        for hint, links, weight in queues:
             if not links:
                 continue
-            link = links.pop(0)
-            yield link, hint
+            # Number of links to take this round = ceil(weight)
+            # At least 1, at most len(links)
+            take = min(len(links), max(1, int(math.ceil(weight))))
+            for _ in range(take):
+                if links:
+                    yield links.pop(0), hint
             if links:
-                remaining.append((hint, links))
+                remaining.append((hint, links, weight))
         queues = remaining
 
 
@@ -2108,6 +2142,17 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
 
         feed_batches: list[tuple[str, list[str]]] = []
         queued_links: set[str] = set()
+
+        # Fetch click stats for weighted feed prioritization (only when client exists)
+        clicks_per_category: dict[str, int] = {}
+        if client is not None:
+            try:
+                clicks_per_category = client.fetch_clicks_per_category()
+                if clicks_per_category:
+                    LOGGER.info("Click stats per category: %s", clicks_per_category)
+            except Exception as error:
+                LOGGER.warning("Could not fetch click stats: %s", error)
+
         for feed in config.feeds:
             if not is_safe_public_url(feed):
                 LOGGER.warning("Skipping unsafe feed URL: %s", feed)
@@ -2130,7 +2175,7 @@ def run_sync(config: Config, args: argparse.Namespace) -> int:
                 feed_batches.append((hint, fresh))
             LOGGER.info("Found %d product link(s) on %s", len(links), feed)
 
-        for link, hint in round_robin_links(feed_batches):
+        for link, hint in weighted_round_robin_links(feed_batches, clicks_per_category):
             if len(collected) >= config.max_products:
                 break
             if url_is_blocked(link):
