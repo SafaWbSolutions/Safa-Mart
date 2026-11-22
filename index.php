@@ -73,7 +73,7 @@ if ($searchQuery !== '' && count($products) < PRODUCTS_PER_PAGE) {
         $searchQuery,
         PRODUCTS_PER_PAGE - count($products),
         $seenIds,
-        count($products) === 0 ? 0.35 : 0.10
+        count($products) === 0 ? 0.20 : 0.10
     );
     if ($semanticRows) {
         $products = array_merge($products, $semanticRows);
