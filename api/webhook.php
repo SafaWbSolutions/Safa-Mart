@@ -823,6 +823,8 @@ foreach ($urls as $url) {
             'category'         => $category,
             'discount_percent' => (int) $payload['discount_percent'],
             'price'            => $price,
+            'mrp'              => $mrp > 0 ? $mrp : $price,
+            'thumbnail_url'    => $primaryImage['url'],
         ];
         try {
             record_price_history($slug, $price, $mrp > 0 ? $mrp : $price);
