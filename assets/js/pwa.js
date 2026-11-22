@@ -23,7 +23,9 @@
 
     var TOPIC_KEY = 'safa_topics_v1';
     var SYNC_KEY = 'safa_push_sync_v1';
+    var DIGEST_KEY = 'safa_digest_v1';
     var topics = loadTopics();
+    var digestMode = loadDigestMode();
     var subscribed = false;
     var busy = false;
     var deferredPrompt = null;
@@ -32,6 +34,33 @@
         || window.navigator.standalone === true;
     var isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
         || (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+
+    function loadTopics() {
+        try {
+            var raw = window.localStorage.getItem(TOPIC_KEY);
+            var parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed.filter(function (t) { return typeof t === 'string'; }) : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function loadDigestMode() {
+        try {
+            var raw = window.localStorage.getItem(DIGEST_KEY);
+            return raw === 'daily' ? 'daily' : 'instant';
+        } catch (error) {
+            return 'instant';
+        }
+    }
+
+    function saveDigestMode(mode) {
+        try {
+            window.localStorage.setItem(DIGEST_KEY, mode);
+        } catch (error) {
+            /* ignore */
+        }
+    }
 
     function loadTopics() {
         try {
@@ -71,6 +100,12 @@
 
     function syncUI() {
         paintChips();
+        // Digest mode radio buttons
+        var digestRadios = document.querySelectorAll('input[name="safa-digest"]');
+        digestRadios.forEach(function (radio) {
+            radio.checked = (radio.value === digestMode);
+        });
+
         if (dot) {
             dot.hidden = subscribed;
         }
@@ -176,7 +211,8 @@
         }
         return post('subscribe', {
             subscription: subscription.toJSON(),
-            topics: topics
+            topics: topics,
+            digest_mode: digestMode
         }).then(function () {
             try {
                 window.localStorage.setItem(SYNC_KEY, String(Date.now()));
@@ -435,6 +471,21 @@
             }
         });
     }
+
+    // Digest mode radio buttons
+    var digestRadios = document.querySelectorAll('input[name="safa-digest"]');
+    digestRadios.forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            if (this.checked) {
+                digestMode = this.value;
+                saveDigestMode(digestMode);
+                if (subscribed) {
+                    currentSubscription().then(syncTopicsToServer).catch(function () { /* ignore */ });
+                }
+                setStatus('Digest mode: ' + (digestMode === 'daily' ? 'Daily 9 AM' : 'Instant'), 'ok');
+            }
+        });
+    });
 
     Array.prototype.forEach.call(document.querySelectorAll('[data-safa-install]'), function (button) {
         button.addEventListener('click', function (event) {

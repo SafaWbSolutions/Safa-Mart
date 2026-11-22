@@ -134,6 +134,72 @@ if ($action === 'announce-drops') {
     ]);
 }
 
+/**
+ * POST ?action=send-daily-digest — called by cron (e.g., GitHub Actions at 9 AM)
+ * to send queued daily digest notifications.
+ * Requires X-Api-Secret header.
+ */
+if ($action === 'send-daily-digest') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        json_response(['ok' => false, 'error' => 'POST required'], 405);
+    }
+    $secret = (string) ($_SERVER['HTTP_X_API_SECRET'] ?? '');
+    if (UPLOAD_API_SECRET === '' || $secret === '' || !hash_equals(UPLOAD_API_SECRET, $secret)) {
+        json_response(['ok' => false, 'error' => 'Unauthorized'], 401);
+    }
+    if (!push_is_configured()) {
+        json_response(['ok' => false, 'error' => 'Push is not configured on the server yet.'], 503);
+    }
+
+    $file = push_storage_path('daily-digest-queue.json');
+    if (!is_file($file)) {
+        json_response(['ok' => true, 'action' => 'send-daily-digest', 'sent' => 0, 'reason' => 'queue empty']);
+    }
+
+    $queue = json_decode((string) @file_get_contents($file), true);
+    if (!is_array($queue) || empty($queue)) {
+        json_response(['ok' => true, 'action' => 'send-daily-digest', 'sent' => 0, 'reason' => 'queue empty']);
+    }
+
+    $sent = 0;
+    $failed = 0;
+    $remaining = [];
+
+    foreach ($queue as $item) {
+        if (!is_array($item) || empty($item['endpoint'])) {
+            continue;
+        }
+        $send = push_send_one(
+            $item['endpoint'],
+            $item['p256dh'] ?? '',
+            $item['auth'] ?? '',
+            $item['payload'] ?? []
+        );
+        if ($send['ok']) {
+            $sent++;
+        } else {
+            $failed++;
+            // Re-queue failed items for next attempt
+            $remaining[] = $item;
+        }
+    }
+
+    // Save remaining items back to queue
+    if ($remaining) {
+        @file_put_contents(push_storage_path('daily-digest-queue.json'), json_encode($remaining, JSON_UNESCAPED_SLASHES), LOCK_EX);
+    } else {
+        @unlink(push_storage_path('daily-digest-queue.json'));
+    }
+
+    json_response([
+        'ok'     => true,
+        'action' => 'send-daily-digest',
+        'sent'   => $sent,
+        'failed' => $failed,
+        'requeued' => count($remaining),
+    ]);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     json_response(['ok' => false, 'error' => 'POST required'], 405);
 }
@@ -164,8 +230,9 @@ if ($action === 'subscribe') {
         json_response(['ok' => false, 'error' => $validated['error']], 400);
     }
     $topics = push_normalize_topics($payload['topics'] ?? []);
-    $id = push_subscribe($validated['subscription'], $topics, (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
-    json_response(['ok' => true, 'id' => $id, 'topics' => $topics]);
+    $digestMode = in_array(($payload['digest_mode'] ?? ''), ['instant', 'daily'], true) ? $payload['digest_mode'] : 'instant';
+    $id = push_subscribe($validated['subscription'], $topics, (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $digestMode);
+    json_response(['ok' => true, 'id' => $id, 'topics' => $topics, 'digest_mode' => $digestMode]);
 }
 
 if ($action === 'unsubscribe') {

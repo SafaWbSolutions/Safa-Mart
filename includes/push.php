@@ -502,26 +502,29 @@ function push_subscriptions_save(array $subscriptions): bool
  *
  * @param array<string,mixed> $subscription
  * @param list<string>        $topics
+ * @param string              $userAgent
+ * @param string              $digestMode 'instant' or 'daily'
  */
-function push_subscribe(array $subscription, array $topics, string $userAgent = ''): string
+function push_subscribe(array $subscription, array $topics, string $userAgent = '', string $digestMode = 'instant'): string
 {
     $endpoint = (string) ($subscription['endpoint'] ?? '');
     $id = substr(sha1($endpoint), 0, 20);
 
-    push_with_lock(static function () use ($subscription, $topics, $id, $userAgent, $endpoint): void {
+    push_with_lock(static function () use ($subscription, $topics, $id, $userAgent, $endpoint, $digestMode): void {
         $all = push_subscriptions_load();
         $existing = is_array($all[$id] ?? null) ? $all[$id] : [];
         $all[$id] = [
-            'endpoint' => $endpoint,
-            'p256dh'   => (string) $subscription['p256dh'],
-            'auth'     => (string) $subscription['auth'],
-            'topics'   => push_normalize_topics($topics),
-            'ua'       => truncate_text(clean_text($userAgent), 140),
-            'created'  => (int) ($existing['created'] ?? time()),
-            'updated'  => time(),
-            'ok'       => (int) ($existing['ok'] ?? 0),
-            'fails'    => 0,
-            'last_ok'  => (int) ($existing['last_ok'] ?? 0),
+            'endpoint'    => $endpoint,
+            'p256dh'      => (string) $subscription['p256dh'],
+            'auth'        => (string) $subscription['auth'],
+            'topics'      => push_normalize_topics($topics),
+            'digest_mode' => in_array($digestMode, ['instant', 'daily'], true) ? $digestMode : 'instant',
+            'ua'          => truncate_text(clean_text($userAgent), 140),
+            'created'     => (int) ($existing['created'] ?? time()),
+            'updated'     => time(),
+            'ok'          => (int) ($existing['ok'] ?? 0),
+            'fails'       => 0,
+            'last_ok'     => (int) ($existing['last_ok'] ?? 0),
         ];
         // Keep the store bounded even if a bot floods it.
         if (count($all) > 5000) {
@@ -727,16 +730,9 @@ function push_send_one(string $endpoint, string $p256dh = '', string $auth = '',
     ];
 }
 
-/**
- * Fan out one notification to every subscriber (or only subscribers who chose
- * the given category). Returns counters for logging/Telegram.
- *
- * @param array<string,mixed> $payload Notification object (title/body/url/image)
- * @return array{sent:int,failed:int,removed:int,skipped:int}
- */
 function push_broadcast(string $category = '', int $limit = 0, array $payload = []): array
 {
-    $result = ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => 0];
+    $result = ['sent' => 0, 'failed' => 0, 'removed' => 0, 'skipped' => 0, 'queued_daily' => 0];
     if (!push_is_configured()) {
         return $result;
     }
@@ -754,8 +750,65 @@ function push_broadcast(string $category = '', int $limit = 0, array $payload = 
     $networkFailures = 0;
     $now = time();
 
-    // Network calls happen without holding the file lock, so a slow push
-    // service never blocks a new visitor from subscribing.
+    // Separate instant vs daily digest subscribers
+    $instantSubs = [];
+    $dailySubs = [];
+    foreach ($subs as $id => $row) {
+        if (!is_array($row) || empty($row['endpoint'])) {
+            continue;
+        }
+        $digestMode = ($row['digest_mode'] ?? 'instant');
+        if ($digestMode === 'daily') {
+            $dailySubs[$id] = $row;
+        } else {
+            $instantSubs[$id] = $row;
+        }
+    }
+
+    // Send instant pushes
+    $result = push_broadcast_to_subs($instantSubs, $category, $max, $payload, $result, $now, $removedIds, $updates, $networkFailures);
+
+    // Queue for daily digest (store in daily digest file)
+    if ($dailySubs) {
+        $queued = queue_daily_digest($dailySubs, $category, $payload);
+        $result['queued_daily'] = $queued;
+    }
+
+    $result['removed'] = count($removedIds);
+    if ($updates || $removedIds) {
+        push_with_lock(static function () use ($updates, $removedIds): void {
+            $current = push_subscriptions_load();
+            foreach ($updates as $id => $patch) {
+                if (!isset($current[$id])) {
+                    continue;
+                }
+                if (isset($patch['fails'])) {
+                    $current[$id]['fails'] = $patch['fails'];
+                }
+                if (isset($patch['last_ok'])) {
+                    $current[$id]['last_ok'] = $patch['last_ok'];
+                    $current[$id]['ok'] = (int) ($current[$id]['ok'] ?? 0) + 1;
+                }
+            }
+            foreach ($removedIds as $id) {
+                unset($current[$id]);
+            }
+            push_subscriptions_save($current);
+        });
+    }
+
+    if ($result['sent'] > 0 || $result['failed'] > 0 || $result['queued_daily'] > 0) {
+        app_log('info', 'Push broadcast finished', $result + ['category' => $category]);
+    }
+
+    return $result;
+}
+
+/**
+ * Send push to a list of subscriptions (used for instant pushes).
+ */
+function push_broadcast_to_subs(array $subs, string $category, int $max, array $payload, array $result, int $now, array &$removedIds, array &$updates, int &$networkFailures): array
+{
     foreach ($subs as $id => $row) {
         if ($result['sent'] + $result['failed'] >= $max) {
             $result['skipped']++;
@@ -801,35 +854,49 @@ function push_broadcast(string $category = '', int $limit = 0, array $payload = 
         }
         $updates[$id] = ['fails' => (int) ($row['fails'] ?? 0) + 1];
     }
-
-    $result['removed'] = count($removedIds);
-    if ($updates || $removedIds) {
-        push_with_lock(static function () use ($updates, $removedIds): void {
-            $current = push_subscriptions_load();
-            foreach ($updates as $id => $patch) {
-                if (!isset($current[$id])) {
-                    continue;
-                }
-                if (isset($patch['fails'])) {
-                    $current[$id]['fails'] = $patch['fails'];
-                }
-                if (isset($patch['last_ok'])) {
-                    $current[$id]['last_ok'] = $patch['last_ok'];
-                    $current[$id]['ok'] = (int) ($current[$id]['ok'] ?? 0) + 1;
-                }
-            }
-            foreach ($removedIds as $id) {
-                unset($current[$id]);
-            }
-            push_subscriptions_save($current);
-        });
-    }
-
-    if ($result['sent'] > 0 || $result['failed'] > 0) {
-        app_log('info', 'Push broadcast finished', $result + ['category' => $category]);
-    }
-
     return $result;
+}
+
+/**
+ * Queue notifications for daily digest subscribers.
+ * Stores in a JSON file to be sent by a daily cron at 9 AM.
+ */
+function queue_daily_digest(array $subs, string $category, array $payload): int
+{
+    $file = push_storage_path('daily-digest-queue.json');
+    $queue = is_file($file) ? json_decode((string) @file_get_contents($file), true) : [];
+    if (!is_array($queue)) {
+        $queue = [];
+    }
+
+    $queued = 0;
+    foreach ($subs as $id => $row) {
+        if (!is_array($row) || empty($row['endpoint'])) {
+            continue;
+        }
+        $topics = is_array($row['topics'] ?? null) ? $row['topics'] : [];
+        if ($category !== '' && $topics && !in_array($category, $topics, true)) {
+            continue;
+        }
+        if ((int) ($row['fails'] ?? 0) >= 5) {
+            continue;
+        }
+
+        $queue[] = [
+            'endpoint'  => $row['endpoint'],
+            'p256dh'    => $row['p256dh'],
+            'auth'      => $row['auth'],
+            'payload'   => $payload,
+            'category'  => $category,
+            'queued_at' => time(),
+        ];
+        $queued++;
+    }
+
+    if ($queued > 0) {
+        @file_put_contents($file, json_encode($queue, JSON_UNESCAPED_SLASHES), LOCK_EX);
+    }
+    return $queued;
 }
 
 /**

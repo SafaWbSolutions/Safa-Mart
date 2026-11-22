@@ -1,0 +1,42 @@
+name: Daily digest push
+
+on:
+  schedule:
+    # 9 AM IST = 3:30 AM UTC
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send-daily-digest:
+    name: Send daily digest push notifications
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SITE_URL: ${{ secrets.SITE_URL }}
+      UPLOAD_API_SECRET: ${{ secrets.UPLOAD_API_SECRET }}
+
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$UPLOAD_API_SECRET" ]; then
+            echo "Daily digest skipped: SITE_URL or UPLOAD_API_SECRET is missing."
+            exit 0
+          fi
+
+      - name: Send daily digest push
+        run: |
+          base="${SITE_URL%/}"
+          code=$(curl -sS -o /tmp/safa-digest.json -w "%{http_code}" -X POST \
+            -H "X-Api-Secret: $UPLOAD_API_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{}' \
+            "$base/api/push.php?action=send-daily-digest" || echo "000")
+          echo "Daily digest push HTTP $code"
+          if [ -f /tmp/safa-digest.json ]; then
+            cat /tmp/safa-digest.json || true
+          fi
+          # Never fail the workflow due to push issues
+          exit 0

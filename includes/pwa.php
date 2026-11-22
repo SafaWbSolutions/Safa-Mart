@@ -86,6 +86,26 @@ function render_pwa_widgets(): void
                 </div>
             </div>
 
+            <div class="safa-pwa-digest" id="safaPwaDigest">
+                <span class="safa-pwa-label">Notification timing</span>
+                <div class="safa-pwa-digest-options">
+                    <label class="safa-pwa-digest-option">
+                        <input type="radio" name="safa-digest" value="instant" checked>
+                        <span class="safa-pwa-digest-label">
+                            <strong>Instant</strong>
+                            <span>Ping immediately when a deal drops</span>
+                        </span>
+                    </label>
+                    <label class="safa-pwa-digest-option">
+                        <input type="radio" name="safa-digest" value="daily">
+                        <span class="safa-pwa-digest-label">
+                            <strong>Daily digest (9 AM)</strong>
+                            <span>One summary notification each morning</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
             <div class="safa-pwa-actions">
                 <button type="button" class="safa-pwa-primary" id="safaPwaEnable">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
