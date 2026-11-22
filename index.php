@@ -4,11 +4,19 @@ security_headers();
 
 $searchQuery = clean_search_term((string) ($_GET['q'] ?? ''));
 $searchTerms = [];
+
+// Parse Hinglish/English intent (e.g., "500 se kam kadhai", "phone under 15000")
+$intent = parse_intent_query($searchQuery);
+
 $category = trim((string) ($_GET['category'] ?? ''));
-$platform = trim((string) ($_GET['platform'] ?? ''));
+// Intent category overrides explicit category param if intent has higher confidence
+if ($intent['category'] !== '' && $category === '') {
+    $category = $intent['category'];
+}
 if (!in_array($category, PRODUCT_CATEGORIES, true)) {
     $category = '';
 }
+$platform = trim((string) ($_GET['platform'] ?? ''));
 if (!in_array($platform, PLATFORM_FILTERS, true)) {
     $platform = '';
 }
@@ -18,7 +26,17 @@ if (!in_array($sort, ['newest', 'price_asc', 'price_desc', 'discount_desc', 'rat
     $sort = '';
 }
 $minPrice = max(0.0, (float) ($_GET['min_price'] ?? 0));
-$maxPrice = max(0.0, (float) ($_GET['max_price'] ?? 0));
+// Intent max_price overrides explicit param if not explicitly set by user
+if ($intent['max_price'] > 0 && (float) ($_GET['max_price'] ?? 0) === 0.0) {
+    $maxPrice = $intent['max_price'];
+} else {
+    $maxPrice = max(0.0, (float) ($_GET['max_price'] ?? 0));
+}
+if ($intent['min_price'] > 0 && (float) ($_GET['min_price'] ?? 0) === 0.0) {
+    $minPrice = $intent['min_price'];
+} else {
+    $minPrice = max(0.0, (float) ($_GET['min_price'] ?? 0));
+}
 if ($minPrice > 0 && $maxPrice > 0 && $minPrice > $maxPrice) {
     $swapPrice = $minPrice;
     $minPrice = $maxPrice;
@@ -36,7 +54,7 @@ if (!in_array($minRating, [3.0, 4.0, 4.5], true)) {
 }
 
 $filters = [
-    'q'            => $searchQuery,
+    'q'            => $intent['search'] !== '' ? $intent['search'] : $searchQuery,
     'q_terms'      => $searchTerms,
     'category'     => $category,
     'platform'     => $platform,

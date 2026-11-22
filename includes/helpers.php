@@ -501,6 +501,110 @@ function expand_search_terms(string $term): array
     return array_values(array_unique($terms));
 }
 
+/**
+ * Parse Hinglish/English intent query into structured filters.
+ * Examples:
+ *   "500 se kam kadhai"        → category: "Home & Kitchen", max_price: 500
+ *   "saree 1000 ke neeche"     → category: "Fashion", max_price: 1000, search: "saree"
+ *   "best phone under 15000"   → category: "Electronics", max_price: 15000
+ *   "shoes under 2000"         → category: "Footwear", max_price: 2000
+ *   "kadhai 500 ke andar"      → category: "Home & Kitchen", max_price: 500
+ *   "watch 5000 se kam"        → category: "Accessories", max_price: 5000
+ *   "kurti 800 tak"            → category: "Fashion", max_price: 800
+ *
+ * @return array{category:string,max_price:float,min_price:float,search:string,original:string}
+ */
+function parse_intent_query(string $query): array
+{
+    $original = $query = clean_search_term($query);
+    if ($query === '') {
+        return ['category' => '', 'max_price' => 0.0, 'min_price' => 0.0, 'search' => '', 'original' => ''];
+    }
+
+    $lower = mb_strtolower($query);
+    $result = [
+        'category'  => '',
+        'max_price' => 0.0,
+        'min_price' => 0.0,
+        'search'    => '',
+        'original'  => $original,
+    ];
+
+    // Category keywords (Hinglish + English)
+    $categoryMap = [
+        'Home & Kitchen' => ['kadhai', 'kadai', 'tawa', 'cooker', 'pressure cooker', 'mixer', 'grinder', 'juicer', 'blender', 'utensil', 'bartan', 'कढ़ाई', 'तवा', 'कुकर', 'मिक्सर', 'बर्तन'],
+        'Fashion' => ['saree', 'sari', 'kurta', 'kurti', 'shirt', 'tshirt', 't-shirt', 'jeans', 'pant', 'pants', 'trouser', 'dress', 'suit', 'lehenga', 'salwar', 'saree', 'साड़ी', 'कुर्ता', 'कुर्ती', 'शर्ट', 'जींस', 'पैंट', 'ड्रेस'],
+        'Electronics' => ['phone', 'mobile', 'smartphone', 'laptop', 'earbud', 'earbuds', 'earphone', 'headphone', 'headphones', 'watch', 'smartwatch', 'tablet', 'charger', 'power bank', 'powerbank', 'मोबाइल', 'फोन', 'लैपटॉप', 'ईयरबड', 'हेडफोन', 'घड़ी'],
+        'Footwear' => ['shoe', 'shoes', 'sneaker', 'sneakers', 'sandal', 'sandals', 'chappal', 'floaters', 'loafer', 'jutti', 'जूता', 'जूते', 'चप्पल', 'सैंडल'],
+        'Beauty' => ['perfume', 'fragrance', 'deo', 'deodorant', 'cream', 'lotion', 'shampoo', 'face wash', 'serum', 'sunscreen', 'makeup', 'lipstick', 'क्रीम', 'लोशन', 'शैम्पू', 'परफ्यूम'],
+        'Grocery' => ['rice', 'dal', 'daal', 'atta', 'oil', 'masala', 'spice', 'sugar', 'tea', 'coffee', 'milk', 'ghee', 'चावल', 'दाल', 'आटा', 'तेल', 'मसाला', 'चीनी', 'चाय'],
+        'Accessories' => ['bag', 'bags', 'backpack', 'handbag', 'purse', 'wallet', 'belt', 'sunglass', 'sunglasses', 'cap', 'hat', 'बैग', 'बैगपैक', 'पर्स', 'बेल्ट'],
+    ];
+
+    // Detect category from query
+    foreach ($categoryMap as $cat => $keywords) {
+        foreach ($keywords as $kw) {
+            if (mb_stripos($lower, $kw) !== false) {
+                $result['category'] = $cat;
+                break 2;
+            }
+        }
+    }
+
+    // Price patterns (Hinglish + English)
+    // "under X", "under X rs", "X rs under", "X ke neeche", "X ke andar", "X tak", "X se kam", "below X", "less than X"
+    $pricePatterns = [
+        '/(?:under|below|less\s+than)\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs|₹|inr)?/iu',
+        '/(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs|₹|inr)?\s*(?:under|below)/iu',
+        '/(\d[\d,]*(?:\.\d{1,2})?)\s*(?:ke\s+neeche|ke\s+andar|tak|se\s+kam)/iu',
+        '/(?:budget|max|maximum)\s*(?:of|:)?\s*(\d[\d,]*(?:\.\d{1,2})?)/iu',
+    ];
+
+    foreach ($pricePatterns as $pattern) {
+        if (preg_match($pattern, $lower, $m)) {
+            $price = (float) str_replace(',', '', $m[1]);
+            if ($price > 0 && $price < 1000000) {
+                $result['max_price'] = $price;
+                break;
+            }
+        }
+    }
+
+    // Min price patterns: "above X", "over X", "X se upar", "X se zyada", "minimum X"
+    $minPricePatterns = [
+        '/(?:above|over|more\s+than)\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs|₹|inr)?/iu',
+        '/(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs|₹|inr)?\s*(?:above|over)/iu',
+        '/(\d[\d,]*(?:\.\d{1,2})?)\s*(?:se\s+upar|se\s+zyada|minimum)/iu',
+    ];
+
+    foreach ($minPricePatterns as $pattern) {
+        if (preg_match($pattern, $lower, $m)) {
+            $price = (float) str_replace(',', '', $m[1]);
+            if ($price > 0 && $price < 1000000) {
+                $result['min_price'] = $price;
+                break;
+            }
+        }
+    }
+
+    // Extract search terms (remove price/category keywords from search)
+    $search = $lower;
+    // Remove price phrases
+    $search = preg_replace('/\b(?:under|below|less\s+than|above|over|more\s+than|ke\s+neeche|ke\s+andar|tak|se\s+kam|se\s+upar|se\s+zyada|budget|maximum|minimum)\b\s*\d[\d,]*(?:\.\d{1,2})?/iu', '', $search);
+    $search = preg_replace('/\b\d[\d,]*(?:\.\d{1,2})?\s*(?:rs|₹|inr)\b/iu', '', $search);
+    // Remove category keywords
+    foreach ($categoryMap as $keywords) {
+        foreach ($keywords as $kw) {
+            $search = preg_replace('/\b' . preg_quote($kw, '/') . '\b/iu', '', $search);
+        }
+    }
+    $search = preg_replace('/\s+/', ' ', $search);
+    $search = trim($search, ' ,.');
+    $result['search'] = $search;
+
+    return $result;
+}
+
 function slugify_title(string $title): string
 {
     $title = clean_text($title);
