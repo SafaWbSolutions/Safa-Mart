@@ -305,15 +305,19 @@ if (SUPABASE_URL !== '') {
             'featuredBadges' => featured_badges(),
             'searchTerms' => array_values($searchTerms),
             'current'     => [
+                // q stays the raw phrase the shopper typed (search box + heading).
                 'q'            => $searchQuery,
-                'category'     => $category,
-                'platform'     => $platform,
-                'sort'         => $sort,
-                'minPrice'     => $minPrice,
-                'maxPrice'     => $maxPrice,
-                'minDiscount'  => $minDiscount,
-                'brand'        => $brand,
-                'minRating'    => $minRating,
+                // apiQ is the parsed intent ("shirt" from "shirt under 2000")
+                // used for pagination so "load more" matches the first page.
+                'apiQ'         => $filters['q'],
+                'category'     => $filters['category'],
+                'platform'     => $filters['platform'],
+                'sort'         => $filters['sort'],
+                'minPrice'     => $filters['min_price'],
+                'maxPrice'     => $filters['max_price'],
+                'minDiscount'  => $filters['min_discount'],
+                'brand'        => $filters['brand'],
+                'minRating'    => $filters['min_rating'],
             ],
         ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     </script>

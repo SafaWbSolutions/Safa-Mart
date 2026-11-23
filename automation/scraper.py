@@ -417,33 +417,29 @@ CATEGORY_AVG_PRICE = {
 
 # Known junk image patterns (logos, placeholders, etc.)
 JUNK_IMAGE_PATTERNS = [
-    r"logo",
     r"placeholder",
-    r"default",
     r"no.image",
     r"no-image",
-    r"unavailable",
-    r"coming.soon",
-    r"coming-soon",
     r"image.not.found",
     r"image-not-found",
-    r"404",
-    r"blank",
-    r"transparent",
+    r"coming.soon",
+    r"coming-soon",
+    r"default.image",
+    r"defaultimg",
+    r"unavailable",
     r"1x1",
-    r"pixel",
-    r"icon",
-    r"sprite",
-    r"banner",
-    r"advertisement",
-    r"promo",
-    r"offer.banner",
+    r"spacer",
+    r"blank.gif",
+    r"transparent.png",
 ]
 
-# Maximum allowed MRP multiplier over price (beyond this = fake MRP)
-MAX_MRP_MULTIPLIER = 5.0
-# Maximum allowed MRP vs category average (beyond this = fake MRP)
-MAX_MRP_VS_CATEGORY_AVG = 3.0
+# Maximum allowed MRP multiplier over price (beyond this = fake MRP).
+# Real Indian marketplace listings go up to ~90% off (10x MRP), so 12x only
+# catches the impossible 92%+ claims without hiding genuine deals.
+MAX_MRP_MULTIPLIER = 12.0
+# Maximum allowed MRP vs category average. Applied only when the category is
+# genuinely known (not "Other"), otherwise it produces false positives.
+MAX_MRP_VS_CATEGORY_AVG = 4.0
 
 
 def is_junk_image(url: str) -> bool:
@@ -488,12 +484,13 @@ def validate_product_quality(
         if mrp_multiplier > MAX_MRP_MULTIPLIER:
             return {"ok": False, "reason": f"fake_mrp: MRP {mrp_multiplier:.1f}x price"}
 
-        cat_avg = CATEGORY_AVG_PRICE.get(category, CATEGORY_AVG_PRICE["Other"])
-        if mrp > cat_avg * MAX_MRP_VS_CATEGORY_AVG and mrp > price * 2:
-            return {"ok": False, "reason": f"fake_mrp: MRP {mrp:.0f} >> category avg {cat_avg:.0f}"}
+        if category in CATEGORY_AVG_PRICE and category != "Other":
+            cat_avg = CATEGORY_AVG_PRICE[category]
+            if mrp > cat_avg * MAX_MRP_VS_CATEGORY_AVG and mrp > price * 2:
+                return {"ok": False, "reason": f"fake_mrp: MRP {mrp:.0f} >> category avg {cat_avg:.0f}"}
 
-    # 2. Suspicious discount with high MRP
-    if discount > 90 and mrp > 10000:
+    # 2. Suspicious discount with high MRP (95%+ off on a big-ticket item)
+    if discount > 95 and mrp > 15000:
         return {"ok": False, "reason": f"suspicious_discount: {discount}% off on high MRP"}
 
     # 3. Junk image detection
@@ -1956,11 +1953,6 @@ def build_product_payload(
     if not metadata["images"]:
         raise ScrapeError("No product image found.")
 
-    # Auto-hide bad deals: fake MRP, junk images, suspicious patterns
-    validation = validate_product_quality(metadata, price, mrp, discount)
-    if not validation["ok"]:
-        raise ScrapeError(f"Auto-hidden: {validation['reason']}")
-
     canonical = canonicalize_url(metadata.get("canonical_url") or product_url)
     if not is_supported_product_url(canonical) or detect_platform(canonical) != detect_platform(product_url):
         canonical = canonicalize_url(product_url)
@@ -1977,6 +1969,19 @@ def build_product_payload(
     price = float(metadata["price"])
     mrp = float(metadata["mrp"] if metadata["mrp"] >= price else price)
     discount = discount_percent(mrp, price)
+
+    # Auto-hide bad deals: fake MRP, junk images, suspicious patterns.
+    # Runs only after price/mrp/discount are known, and the category is resolved
+    # from the feed hint / title so the MRP benchmark is meaningful.
+    quality_category = (
+        str(metadata.get("category_hint") or "")
+        or str(feed_hint or "")
+        or infer_category(str(metadata.get("title") or ""))
+    )
+    metadata["category_hint"] = quality_category
+    validation = validate_product_quality(metadata, price, mrp, discount)
+    if not validation["ok"]:
+        raise ScrapeError(f"Auto-hidden: {validation['reason']}")
 
     # Decide before downloading/uploading images, otherwise skipped deals leave
     # orphan WebP files behind and waste time.

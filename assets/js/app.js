@@ -23,6 +23,7 @@
 
     var state = {
         q: current.q || '',
+        apiQ: typeof current.apiQ === 'string' && current.apiQ !== '' ? current.apiQ : (current.q || ''),
         searchTerms: Array.isArray(current.searchTerms) ? current.searchTerms.slice(0, 7) : [],
         category: current.category || '',
         platform: current.platform || '',
@@ -529,6 +530,11 @@
             order = 'discount_percent.desc';
         } else if (state.sort === 'rating_desc') {
             order = 'rating.desc';
+        } else if (state.sort === 'deal_score') {
+            // The real score is computed in PHP for the first page. Keep the
+            // fetch order identical to product_order_clause() so "load more"
+            // continues the same ranking instead of restarting from newest.
+            order = 'discount_percent.desc';
         }
         params.set('order', order);
         params.set('limit', String(pageSize));
@@ -566,7 +572,6 @@
                 conditions.push(
                     'title.ilike.' + cleanPattern,
                     'category.ilike.' + cleanPattern,
-                    'source_platform.ilike.' + cleanPattern,
                     'brand.ilike.' + cleanPattern
                 );
             });
@@ -574,10 +579,10 @@
                 params.set('or', '(' + conditions.join(',') + ')');
             }
         } else {
-            var search = sanitizeSearch(state.q);
+            var search = sanitizeSearch(state.apiQ || state.q);
             if (search !== '') {
                 var pattern = '*' + search + '*';
-                params.set('or', '(title.ilike.' + pattern + ',category.ilike.' + pattern + ',source_platform.ilike.' + pattern + ',brand.ilike.' + pattern + ')');
+                params.set('or', '(title.ilike.' + pattern + ',category.ilike.' + pattern + ',brand.ilike.' + pattern + ')');
             }
         }
         return params.toString().replace(/\+/g, '%20');
@@ -773,6 +778,9 @@
                 window.clearTimeout(searchTimer);
                 searchTimer = window.setTimeout(function () {
                     state.q = searchInput.value.trim();
+                    // A new keystroke is a new query: drop the parsed intent so
+                    // the intent parser re-runs server-side on the next load.
+                    state.apiQ = state.q;
                     resetAndLoad();
                 }, 450);
             });
@@ -825,6 +833,7 @@
         $all('[data-clear-filters]').forEach(function (button) {
             button.addEventListener('click', function () {
                 state.q = '';
+                state.apiQ = '';
                 state.searchTerms = [];
                 state.category = '';
                 state.platform = '';
