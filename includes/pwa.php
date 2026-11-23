@@ -106,6 +106,20 @@ function render_pwa_widgets(): void
                 </div>
             </div>
 
+            <div class="safa-pwa-language" id="safaPwaLanguage">
+                <span class="safa-pwa-label">Language / भाषा</span>
+                <div class="safa-pwa-lang-options">
+                    <button type="button" class="safa-pwa-lang-btn" data-lang="en" aria-pressed="true">
+                        <span class="lang-flag">🇮🇳</span>
+                        <span>English</span>
+                    </button>
+                    <button type="button" class="safa-pwa-lang-btn" data-lang="hi" aria-pressed="false">
+                        <span class="lang-flag">🇮🇳</span>
+                        <span>हिंदी (Hinglish)</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="safa-pwa-actions">
                 <button type="button" class="safa-pwa-primary" id="safaPwaEnable">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
