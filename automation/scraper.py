@@ -1436,6 +1436,31 @@ class SupabaseClient:
         except ScrapeError as error:
             LOGGER.info("Price history skipped (table missing?): %s", error)
 
+    def fetch_recent_history_map(self, limit: int = 2000) -> dict[str, dict[str, Any]]:
+        """Return the newest price_history row per slug (slug -> row).
+
+        Used by the stock check to decide whether a product needs a fresh
+        snapshot, so the table gains one row per product per day instead of one
+        per 4-hour run.
+        """
+        path = (
+            "price_history?select=slug,price,recorded_at"
+            f"&order=recorded_at.desc&limit={max(1, min(5000, limit))}"
+        )
+        try:
+            data = self._request("GET", path).json()
+        except (ScrapeError, ValueError) as error:
+            LOGGER.info("Price history lookup skipped: %s", error)
+            return {}
+        latest: dict[str, dict[str, Any]] = {}
+        for row in data if isinstance(data, list) else []:
+            if not isinstance(row, dict):
+                continue
+            slug = str(row.get("slug") or "").strip().lower()
+            if slug and slug not in latest:
+                latest[slug] = row
+        return latest
+
     def patch_metadata(self, preview: dict[str, Any]) -> None:
         """Backfill brand/rating/description on an existing product."""
         original_url = str(preview.get("original_url") or "")
@@ -2071,6 +2096,20 @@ def preview_product(config: Config, session: requests.Session, product_url: str)
     )
 
 
+def history_is_fresh(recorded_at: Any, now: datetime, max_age_hours: float) -> bool:
+    """True when a price_history timestamp is younger than max_age_hours."""
+    text = str(recorded_at or "").strip()
+    if text == "":
+        return False
+    try:
+        stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (now - stamp).total_seconds() < max_age_hours * 3600
+
+
 def check_existing_products(
     config: Config,
     client: SupabaseClient,
@@ -2087,6 +2126,9 @@ def check_existing_products(
     broken: list[int] = []
     healthy: list[int] = []
     price_updates = 0
+    snapshots: list[dict[str, Any]] = []
+    recent_history = client.fetch_recent_history_map()
+    now_ts = datetime.now(timezone.utc)
 
     for row in rows:
         product_id = int(row.get("id") or 0)
@@ -2127,7 +2169,12 @@ def check_existing_products(
 
         new_price = float(metadata["price"])
         old_price = float(row.get("price") or 0)
-        if new_price > 0 and old_price > 0 and abs(new_price - old_price) > max(2.0, old_price * 0.02):
+        price_changed = (
+            new_price > 0
+            and old_price > 0
+            and abs(new_price - old_price) > max(2.0, old_price * 0.02)
+        )
+        if price_changed:
             old_mrp = float(row.get("mrp") or 0)
             new_mrp = float(metadata["mrp"])
             if new_mrp < new_price:
@@ -2149,6 +2196,23 @@ def check_existing_products(
             except ScrapeError as error:
                 LOGGER.warning("Price update failed for product %s: %s", product_id, error)
 
+        # Keep the price series alive: one snapshot per product per ~20 hours,
+        # plus an immediate snapshot whenever the price actually moved. Without
+        # this the sparkline and price-drop alerts never get data.
+        slug = str(row.get("slug") or "").strip().lower()
+        if slug and new_price > 0:
+            last = recent_history.get(slug)
+            needs_snapshot = price_changed or last is None
+            if not needs_snapshot and last is not None:
+                needs_snapshot = not history_is_fresh(last.get("recorded_at"), now_ts, 20)
+            if needs_snapshot:
+                snap_mrp = float(metadata["mrp"] or 0)
+                snapshots.append({
+                    "slug": slug,
+                    "price": new_price,
+                    "mrp": snap_mrp if snap_mrp >= new_price else new_price,
+                })
+
         healthy.append(product_id)
         time.sleep(random.uniform(0.25, 0.6))
 
@@ -2168,6 +2232,10 @@ def check_existing_products(
             client.patch_ids(healthy, {"last_checked_at": now})
         except ScrapeError as error:
             LOGGER.warning("Could not update last_checked_at: %s", error)
+
+    if snapshots:
+        client.record_price_history(snapshots)
+        LOGGER.info("Price history: recorded %d snapshot(s)", len(snapshots))
 
     LOGGER.info(
         "Stock check complete: %d checked, %d deactivated, %d price update(s)",
