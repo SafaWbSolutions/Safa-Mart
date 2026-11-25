@@ -4,7 +4,7 @@ security_headers();
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
-header('Vary: User-Agent');
+header('Vary: User-Agent, Cookie');
 header('X-Robots-Tag: noindex, nofollow');
 header('Referrer-Policy: no-referrer');
 
@@ -47,7 +47,13 @@ if ($platform === '') {
 
 // Android phones: try the merchant app first, fall back to the affiliate link
 // (website) when the app is missing. Everything else keeps the plain 302.
-if (merchant_app_package($platform) !== '' && is_android_mobile_request()) {
+//
+// The bridge marks a store when the app did not open, so repeat visits go
+// straight to the website instead of showing the "opening app" screen again.
+$appMissingKey = merchant_app_platform_key($platform);
+if (merchant_app_package($platform) !== ''
+    && is_android_mobile_request()
+    && ($appMissingKey === '' || !isset($_COOKIE['safa_noapp_' . $appMissingKey]))) {
     render_merchant_app_bridge($product, $affiliateUrl, $platform);
     exit;
 }

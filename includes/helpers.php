@@ -1706,11 +1706,9 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
         . '.bridge-btn{display:block;padding:15px 18px;border-radius:14px;font-weight:700;'
         . 'font-size:1rem;text-decoration:none;color:#fff;background:linear-gradient(135deg,#e91e63,#c51752);'
         . 'box-shadow:0 10px 24px rgba(233,30,99,.28)}'
-        . '.bridge-btn.is-pulse{animation:pulse 1.1s ease-in-out infinite}'
-        . '@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}'
         . '.bridge-link{display:inline-block;margin-top:16px;font-size:.88rem;font-weight:600;'
         . 'color:#881641;text-decoration:none;border-bottom:1px solid rgba(136,22,65,.35)}'
-        . '.bridge-hint{margin:16px 0 0;font-size:.82rem;color:#b45309}'
+        . '.bridge-note{margin:14px 0 0;font-size:.8rem;color:#6b7280}'
         . '</style>'
         . '</head><body>'
         . '<main class="bridge">'
@@ -1721,7 +1719,7 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
         . 'Open in ' . e($platform) . ' app</a>'
         . '<a class="bridge-link" id="bridge-web" href="' . e($affiliateUrl) . '" rel="nofollow sponsored noopener">'
         . 'Continue on website</a>'
-        . '<p class="bridge-hint" id="bridge-hint" hidden>App did not open? Tap the button above.</p>'
+        . '<p class="bridge-note">If the app is not installed, we open the website automatically.</p>'
         . '</main>';
 
     // Paint the bridge before the network round-trips below.
@@ -1736,11 +1734,14 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
     $trackingOk = $target !== ''
         && (!is_affiliate_url($affiliateUrl) || has_affiliate_tracking_params($target));
     $package = $trackingOk ? merchant_app_package(detect_platform($target)) : '';
-    // The resolved URL already carries the affiliate tracking parameters, so it
-    // is the fastest correct fallback for both the app and the website.
-    $webUrl = $trackingOk ? $target : $affiliateUrl;
+    // The website path always uses the original affiliate link, so the buyer
+    // still sees the EarnKaro redirect page and the click is tracked exactly
+    // like it was before the app bridge existed.
+    $webUrl = $affiliateUrl;
     $intent = $package !== '' ? build_android_intent_url($target, $package, $webUrl) : '';
     $jsonFlags = JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+    $platformKey = merchant_app_platform_key($platform);
+    $cookieName = 'safa_noapp_' . ($platformKey !== '' ? $platformKey : 'store');
 
     if ($intent === '') {
         app_log('info', 'App bridge fell back to website', [
@@ -1749,7 +1750,10 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
             'target'      => $target,
             'tracking_ok' => $trackingOk,
         ]);
-        echo '<script>window.location.replace(' . json_encode($affiliateUrl, $jsonFlags) . ');</script>'
+        // Remember the miss so the next visit skips this screen entirely.
+        echo '<script>(function(){try{document.cookie=' . json_encode($cookieName, $jsonFlags)
+            . '+"=1;path=/;max-age=604800;SameSite=Lax"+(location.protocol==="https:"?";Secure":"");}catch(e){}'
+            . 'window.location.replace(' . json_encode($affiliateUrl, $jsonFlags) . ');})();</script>'
             . '</body></html>';
         return;
     }
@@ -1757,24 +1761,26 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
     echo '<script>(function(){'
         . 'var intent=' . json_encode($intent, $jsonFlags) . ';'
         . 'var web=' . json_encode($webUrl, $jsonFlags) . ';'
+        . 'var cookieName=' . json_encode($cookieName, $jsonFlags) . ';'
         . 'var app=document.getElementById("bridge-app");'
         . 'var webLink=document.getElementById("bridge-web");'
-        . 'var hint=document.getElementById("bridge-hint");'
-        . 'var title=document.getElementById("bridge-title");'
-        . 'var spinner=document.querySelector(".bridge-spinner");'
         . 'if(app){app.href=intent;}'
         . 'if(webLink){webLink.href=web;}'
+        . 'var secure=location.protocol==="https:"?";Secure":"";'
+        . 'function writeCookie(v,age){try{document.cookie=cookieName+"="+v+";path=/;max-age="+age+";SameSite=Lax"+secure;}catch(e){}}'
+        // Provisional mark. Cleared as soon as the app takes over the screen;
+        // if it stays, the next visit skips this screen entirely.
+        . 'writeCookie("1",604800);'
         . 'var left=false;'
-        . 'function markLeft(){left=true;}'
-        . 'document.addEventListener("visibilitychange",function(){if(document.hidden){markLeft();}});'
-        . 'window.addEventListener("blur",markLeft);'
-        . 'setTimeout(function(){'
-        . 'if(left||document.hidden){return;}'
-        . 'if(hint){hint.hidden=false;}'
-        . 'if(title){title.textContent="Tap to open the app";}'
-        . 'if(spinner){spinner.style.display="none";}'
-        . 'if(app){app.classList.add("is-pulse");}'
-        . '},1400);'
+        . 'function appOpened(){left=true;writeCookie("",0);}'
+        // A hidden tab means the merchant app really took over the screen.
+        . 'document.addEventListener("visibilitychange",function(){if(document.hidden){appOpened();}});'
+        // Blur alone only pauses the redirect: some browsers blur the window
+        // during the hand-off even when the app never opens.
+        . 'window.addEventListener("blur",function(){left=true;});'
+        // The app did not take over within the grace period, so the buyer is
+        // forwarded to the website on its own (no extra tap needed).
+        . 'setTimeout(function(){if(left||document.hidden){return;}window.location.replace(web);},1400);'
         . 'try{window.location.href=intent;}catch(e){}'
         . '})();</script></body></html>';
 }

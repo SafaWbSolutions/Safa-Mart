@@ -1071,6 +1071,15 @@ function merchant_app_package(string $platform): string
 }
 
 /**
+ * Cookie-safe key for a store name ("Tata CLiQ" -> "tatacliq"). go.php and the
+ * app bridge use the same key for the "app not installed" cookie.
+ */
+function merchant_app_platform_key(string $platform): string
+{
+    return strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $platform));
+}
+
+/**
  * Build an Android intent:// link that opens $targetUrl inside $package.
  * Chrome uses S.browser_fallback_url when the app is missing, so affiliate
  * tracking still survives on the website path.
