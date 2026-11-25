@@ -1215,6 +1215,33 @@ function http_probe(string $url, int $timeout = 6, int $maxBytes = 65536): array
 }
 
 /**
+ * True when a URL carries affiliate tracking signals (affid, click id, utm
+ * campaign). Safety net so go.php never opens an untracked merchant URL when
+ * resolving an affiliate short link loses its parameters.
+ */
+function has_affiliate_tracking_params(string $url): bool
+{
+    $query = (string) parse_url($url, PHP_URL_QUERY);
+    if ($query === '') {
+        return false;
+    }
+
+    parse_str($query, $params);
+    $keys = [
+        'affid', 'affextparam1', 'affextparam2', 'affextparam3',
+        'clickid', 'click_id', 'icid', 'tag', 'cid', 'pid',
+        'utm_source', 'utm_campaign', 'utm_medium',
+    ];
+    foreach ($keys as $key) {
+        if (!empty($params[$key]) && is_string($params[$key])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Unwrap a destination query parameter that still carries tracking data.
  * "url"/"dl" parameters are skipped on purpose: affiliate networks keep the
  * *untracked* product URL there, and following them would break commission.

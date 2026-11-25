@@ -1731,18 +1731,23 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
     @flush();
 
     $target = resolve_tracked_merchant_url($affiliateUrl);
-    $package = $target !== '' ? merchant_app_package(detect_platform($target)) : '';
+    // Never skip commission: when the resolved URL lost its affiliate
+    // parameters we keep the original short link (browser flow) instead.
+    $trackingOk = $target !== ''
+        && (!is_affiliate_url($affiliateUrl) || has_affiliate_tracking_params($target));
+    $package = $trackingOk ? merchant_app_package(detect_platform($target)) : '';
     // The resolved URL already carries the affiliate tracking parameters, so it
     // is the fastest correct fallback for both the app and the website.
-    $webUrl = $target !== '' ? $target : $affiliateUrl;
+    $webUrl = $trackingOk ? $target : $affiliateUrl;
     $intent = $package !== '' ? build_android_intent_url($target, $package, $webUrl) : '';
     $jsonFlags = JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
     if ($intent === '') {
         app_log('info', 'App bridge fell back to website', [
-            'id'       => (int) ($product['id'] ?? 0),
-            'platform' => $platform,
-            'target'   => $target,
+            'id'          => (int) ($product['id'] ?? 0),
+            'platform'    => $platform,
+            'target'      => $target,
+            'tracking_ok' => $trackingOk,
         ]);
         echo '<script>window.location.replace(' . json_encode($affiliateUrl, $jsonFlags) . ');</script>'
             . '</body></html>';
