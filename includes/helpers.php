@@ -1719,7 +1719,7 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
         . '<p class="bridge-product">' . e($title) . '</p>'
         . '<a class="bridge-btn" id="bridge-app" href="' . e($affiliateUrl) . '" rel="nofollow sponsored noopener">'
         . 'Open in ' . e($platform) . ' app</a>'
-        . '<a class="bridge-link" href="' . e($affiliateUrl) . '" rel="nofollow sponsored noopener">'
+        . '<a class="bridge-link" id="bridge-web" href="' . e($affiliateUrl) . '" rel="nofollow sponsored noopener">'
         . 'Continue on website</a>'
         . '<p class="bridge-hint" id="bridge-hint" hidden>App did not open? Tap the button above.</p>'
         . '</main>';
@@ -1732,7 +1732,10 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
 
     $target = resolve_tracked_merchant_url($affiliateUrl);
     $package = $target !== '' ? merchant_app_package(detect_platform($target)) : '';
-    $intent = $package !== '' ? build_android_intent_url($target, $package, $affiliateUrl) : '';
+    // The resolved URL already carries the affiliate tracking parameters, so it
+    // is the fastest correct fallback for both the app and the website.
+    $webUrl = $target !== '' ? $target : $affiliateUrl;
+    $intent = $package !== '' ? build_android_intent_url($target, $package, $webUrl) : '';
     $jsonFlags = JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
     if ($intent === '') {
@@ -1748,11 +1751,14 @@ function render_merchant_app_bridge(array $product, string $affiliateUrl, string
 
     echo '<script>(function(){'
         . 'var intent=' . json_encode($intent, $jsonFlags) . ';'
+        . 'var web=' . json_encode($webUrl, $jsonFlags) . ';'
         . 'var app=document.getElementById("bridge-app");'
+        . 'var webLink=document.getElementById("bridge-web");'
         . 'var hint=document.getElementById("bridge-hint");'
         . 'var title=document.getElementById("bridge-title");'
         . 'var spinner=document.querySelector(".bridge-spinner");'
         . 'if(app){app.href=intent;}'
+        . 'if(webLink){webLink.href=web;}'
         . 'var left=false;'
         . 'function markLeft(){left=true;}'
         . 'document.addEventListener("visibilitychange",function(){if(document.hidden){markLeft();}});'
