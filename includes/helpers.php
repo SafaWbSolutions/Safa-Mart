@@ -1350,6 +1350,23 @@ function client_ip(): string
     return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
 }
 
+/**
+ * True when the current request comes from an Android phone/tablet browser.
+ * Bots and desktop browsers are excluded so the app bridge only runs where it
+ * can actually open a merchant app.
+ */
+function is_android_mobile_request(): bool
+{
+    $ua = strtolower(trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? '')));
+    if ($ua === '' || !str_contains($ua, 'android')) {
+        return false;
+    }
+    if (preg_match('/bot|spider|crawl|slurp|preview|headless|phantom|curl|wget|python-|java\/|okhttp/', $ua)) {
+        return false;
+    }
+    return true;
+}
+
 function telegram_escape(string $text): string
 {
     return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -1651,4 +1668,96 @@ function human_date(?string $date): string
         return '';
     }
     return date('d M Y', $timestamp);
+}
+
+/**
+ * Android "opening app" screen used by go.php. The affiliate short link is
+ * resolved server side to the tracked merchant URL (see
+ * resolve_tracked_merchant_url), then handed to the installed app through an
+ * intent:// link. When the app is missing Chrome follows the fallback URL and
+ * the buyer lands on the website with affiliate tracking intact.
+ */
+function render_merchant_app_bridge(array $product, string $affiliateUrl, string $platform): void
+{
+    $title = truncate_text(clean_product_title((string) ($product['title'] ?? '')), 70);
+    if ($title === '') {
+        $title = 'your product';
+    }
+
+    header('Content-Type: text/html; charset=utf-8');
+
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<meta name="robots" content="noindex, nofollow">'
+        . '<title>Opening ' . e($platform) . ' app...</title>'
+        . '<noscript><meta http-equiv="refresh" content="0;url=' . e($affiliateUrl) . '"></noscript>'
+        . '<style>'
+        . 'html,body{margin:0;padding:0;min-height:100%;background:#fff7fa;'
+        . "font-family:'Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;color:#1f2430}"
+        . 'body{display:flex;align-items:center;justify-content:center;padding:28px 20px}'
+        . '.bridge{width:100%;max-width:420px;background:#fff;border:1px solid #f3d4e0;'
+        . 'border-radius:22px;padding:30px 24px;text-align:center;'
+        . 'box-shadow:0 18px 45px rgba(233,30,99,.12)}'
+        . '.bridge-spinner{width:46px;height:46px;margin:0 auto 18px;border-radius:50%;'
+        . 'border:4px solid #ffe0ea;border-top-color:#e91e63;animation:spin .9s linear infinite}'
+        . '@keyframes spin{to{transform:rotate(360deg)}}'
+        . '.bridge h1{font-size:1.16rem;margin:0 0 8px;line-height:1.35}'
+        . '.bridge-product{margin:0 0 22px;font-size:.9rem;color:#6b7280;line-height:1.45}'
+        . '.bridge-btn{display:block;padding:15px 18px;border-radius:14px;font-weight:700;'
+        . 'font-size:1rem;text-decoration:none;color:#fff;background:linear-gradient(135deg,#e91e63,#c51752);'
+        . 'box-shadow:0 10px 24px rgba(233,30,99,.28)}'
+        . '.bridge-btn.is-pulse{animation:pulse 1.1s ease-in-out infinite}'
+        . '@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}'
+        . '.bridge-link{display:inline-block;margin-top:16px;font-size:.88rem;font-weight:600;'
+        . 'color:#881641;text-decoration:none;border-bottom:1px solid rgba(136,22,65,.35)}'
+        . '.bridge-hint{margin:16px 0 0;font-size:.82rem;color:#b45309}'
+        . '</style>'
+        . '</head><body>'
+        . '<main class="bridge">'
+        . '<div class="bridge-spinner" aria-hidden="true"></div>'
+        . '<h1>Opening ' . e($platform) . ' app</h1>'
+        . '<p class="bridge-product">' . e($title) . '</p>'
+        . '<a class="bridge-btn" id="bridge-app" href="' . e($affiliateUrl) . '" rel="nofollow sponsored noopener">'
+        . 'Open in ' . e($platform) . ' app</a>'
+        . '<a class="bridge-link" href="' . e($affiliateUrl) . '" rel="nofollow sponsored noopener">'
+        . 'Continue on website</a>'
+        . '<p class="bridge-hint" id="bridge-hint" hidden>App nahi khula? Upar wale button par tap karein.</p>'
+        . '</main>';
+
+    // Paint the bridge before the network round-trips below.
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
+    @flush();
+
+    $target = resolve_tracked_merchant_url($affiliateUrl);
+    $package = $target !== '' ? merchant_app_package(detect_platform($target)) : '';
+    $intent = $package !== '' ? build_android_intent_url($target, $package, $affiliateUrl) : '';
+    $jsonFlags = JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+
+    if ($intent === '') {
+        app_log('info', 'App bridge fell back to website', [
+            'id'       => (int) ($product['id'] ?? 0),
+            'platform' => $platform,
+            'target'   => $target,
+        ]);
+        echo '<script>window.location.replace(' . json_encode($affiliateUrl, $jsonFlags) . ');</script>'
+            . '</body></html>';
+        return;
+    }
+
+    echo '<script>(function(){'
+        . 'var intent=' . json_encode($intent, $jsonFlags) . ';'
+        . 'var app=document.getElementById("bridge-app");'
+        . 'var hint=document.getElementById("bridge-hint");'
+        . 'if(app){app.href=intent;}'
+        . 'var left=false;'
+        . 'function markLeft(){left=true;}'
+        . 'document.addEventListener("visibilitychange",function(){if(document.hidden){markLeft();}});'
+        . 'window.addEventListener("blur",markLeft);'
+        . 'setTimeout(function(){'
+        . 'if(!left&&!document.hidden&&hint){hint.hidden=false;if(app){app.classList.add("is-pulse");}}'
+        . '},1400);'
+        . 'try{window.location.href=intent;}catch(e){}'
+        . '})();</script></body></html>';
 }

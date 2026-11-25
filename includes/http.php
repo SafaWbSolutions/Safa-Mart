@@ -1039,3 +1039,256 @@ function convert_to_affiliate(string $url, ?string $platform = null): array
         'error' => $reason,
     ];
 }
+
+// ---------------------------------------------------------------------------
+// Merchant app deep links (Android)
+// ---------------------------------------------------------------------------
+
+/**
+ * Android package ids for the stores we support. Used by go.php to open the
+ * merchant app when it is installed and fall back to the website otherwise.
+ *
+ * @return array<string,string>
+ */
+function merchant_app_packages(): array
+{
+    return [
+        'Flipkart' => 'com.flipkart.android',
+        'Shopsy'   => 'com.flipkart.shopsy',
+        'Myntra'   => 'com.myntra.android',
+        'Ajio'     => 'com.ril.ajio',
+        'Amazon'   => 'in.amazon.mShop.android.shopping',
+    ];
+}
+
+function merchant_app_package(string $platform): string
+{
+    if ($platform === '') {
+        return '';
+    }
+
+    return (string) (merchant_app_packages()[$platform] ?? '');
+}
+
+/**
+ * Build an Android intent:// link that opens $targetUrl inside $package.
+ * Chrome uses S.browser_fallback_url when the app is missing, so affiliate
+ * tracking still survives on the website path.
+ */
+function build_android_intent_url(string $targetUrl, string $package, string $fallbackUrl): string
+{
+    $target = trim($targetUrl);
+    if ($target === '' || $package === '' || !preg_match('#^https?://#i', $target)) {
+        return '';
+    }
+
+    $target = preg_replace('/#.*$/', '', $target) ?? '';
+    $target = preg_replace('#^https?://#i', '', $target) ?? '';
+    if ($target === '') {
+        return '';
+    }
+
+    // Semicolons separate the intent extras that follow "#Intent;".
+    $target = str_replace(';', '%3B', $target);
+
+    return 'intent://' . $target
+        . '#Intent;scheme=https;package=' . $package
+        . ';S.browser_fallback_url=' . rawurlencode($fallbackUrl)
+        . ';end';
+}
+
+/**
+ * Follow an affiliate short link until the merchant product URL is reached,
+ * keeping the tracking parameters that the network appends on the way.
+ *
+ * EarnKaro style links answer with an HTML interstitial that stores the real
+ * destination in `cashbackUrl`; a few stores then bounce through one more
+ * tracking domain (techtrack.in, AppsFlyer OneLink) before the merchant URL
+ * appears. Everything stays server side so the browser never shows those
+ * interstitials, which is what stopped Android from opening the app.
+ */
+function resolve_tracked_merchant_url(string $url, int $maxHops = 4): string
+{
+    $current = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if ($current === '' || !preg_match('#^https?://#i', $current)) {
+        return '';
+    }
+
+    // Keep the buyer waiting for a couple of seconds at most; the bridge page
+    // falls back to the affiliate link when this budget runs out.
+    $deadline = microtime(true) + 6.0;
+
+    for ($hop = 0; $hop < $maxHops; $hop++) {
+        $current = trim($current);
+        if ($current === '' || !preg_match('#^https?://#i', $current)) {
+            return '';
+        }
+
+        if (detect_platform($current) !== 'Other' && !needs_url_resolution($current)) {
+            return $current;
+        }
+
+        $fromQuery = find_tracked_merchant_url_in_query($current);
+        if ($fromQuery !== '') {
+            return $fromQuery;
+        }
+
+        if (!is_safe_remote_url($current)) {
+            return '';
+        }
+
+        $remaining = (int) ceil($deadline - microtime(true));
+        if ($remaining < 3) {
+            return '';
+        }
+
+        $probe = http_probe($current, min(6, $remaining), 65536);
+        if ($probe['status'] === 0) {
+            return '';
+        }
+
+        // Tracking hops answer with a plain redirect; stop here so the heavy
+        // merchant page is never downloaded.
+        if ($probe['status'] >= 300 && $probe['status'] < 400 && $probe['location'] !== '') {
+            $next = resolve_url($current, $probe['location']);
+            if (!is_safe_remote_url($next) || $next === $current) {
+                return '';
+            }
+            $current = $next;
+            continue;
+        }
+
+        $next = find_redirect_url_in_html($probe['body'], $current);
+        if ($next !== '' && $next !== $current && is_safe_remote_url($next)) {
+            $current = $next;
+            continue;
+        }
+
+        return '';
+    }
+
+    return detect_platform($current) !== 'Other' && !needs_url_resolution($current) ? $current : '';
+}
+
+/**
+ * One HTTP round-trip without following redirects, used by the app deep-link
+ * resolver which only needs the Location header of each tracking hop.
+ *
+ * @return array{status:int,location:string,body:string,content_type:string,error:string}
+ */
+function http_probe(string $url, int $timeout = 6, int $maxBytes = 65536): array
+{
+    $headers = [
+        'Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'User-Agent: ' . USER_AGENT,
+    ];
+    $headers = add_browser_fingerprint_headers($headers);
+
+    $cookieFile = @tempnam(sys_get_temp_dir(), 'safa_http_');
+    if ($cookieFile === false) {
+        $cookieFile = null;
+    }
+
+    try {
+        $response = http_request_once(
+            $url,
+            'GET',
+            $headers,
+            null,
+            max(1024, $maxBytes),
+            max(3, min(30, $timeout)),
+            $cookieFile
+        );
+    } finally {
+        if ($cookieFile !== null && is_file($cookieFile)) {
+            @unlink($cookieFile);
+        }
+    }
+
+    return [
+        'status'       => (int) ($response['status'] ?? 0),
+        'location'     => trim((string) ($response['headers']['location'] ?? '')),
+        'body'         => (string) ($response['body'] ?? ''),
+        'content_type' => (string) ($response['content_type'] ?? ''),
+        'error'        => (string) ($response['error'] ?? ''),
+    ];
+}
+
+/**
+ * Unwrap a destination query parameter that still carries tracking data.
+ * "url"/"dl" parameters are skipped on purpose: affiliate networks keep the
+ * *untracked* product URL there, and following them would break commission.
+ */
+function find_tracked_merchant_url_in_query(string $url): string
+{
+    $query = (string) parse_url($url, PHP_URL_QUERY);
+    if ($query === '') {
+        return '';
+    }
+
+    parse_str($query, $params);
+    $keys = ['r', 'redirect', 'redirect_url', 'redirect_uri', 'target', 'dest', 'destination', 'deeplink'];
+    foreach ($keys as $key) {
+        if (empty($params[$key]) || !is_string($params[$key])) {
+            continue;
+        }
+
+        $candidate = trim($params[$key]);
+        if ($candidate === '') {
+            continue;
+        }
+        if (!preg_match('#^https?://#i', $candidate)) {
+            $candidate = resolve_url($url, $candidate);
+        }
+        if (detect_platform($candidate) !== 'Other' && !needs_url_resolution($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Pull the next redirect target out of an HTML interstitial (cashbackUrl,
+ * location assignment or meta refresh).
+ */
+function find_redirect_url_in_html(string $html, string $baseUrl): string
+{
+    if (trim($html) === '') {
+        return '';
+    }
+
+    $patterns = [
+        '/cashbackUrl\s*=\s*["\']([^"\']+)["\']/i',
+        '/(?:window\.|document\.)?location(?:\.href)?\s*=\s*["\']([^"\']+)["\']/i',
+        '/location\.(?:replace|assign)\(\s*["\']([^"\']+)["\']\s*\)/i',
+        '/<meta[^>]+http-equiv=["\']refresh["\'][^>]*content=["\'][^"\']*url=([^"\'>\s]+)/i',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (!preg_match_all($pattern, $html, $matches)) {
+            continue;
+        }
+        foreach ($matches[1] as $candidate) {
+            $candidate = str_replace(
+                ['\\/', '\\u002F', '\\u002f', '&amp;', '&#038;', '&#x26;'],
+                ['/', '/', '/', '&', '&', '&'],
+                (string) $candidate
+            );
+            $candidate = html_entity_decode(trim($candidate), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $candidate = rtrim($candidate, ".,;)]}'\"");
+            if ($candidate === '' || !preg_match('#^(?:https?:)?//#i', $candidate)) {
+                continue;
+            }
+            if (!preg_match('#^https?://#i', $candidate)) {
+                $candidate = 'https:' . $candidate;
+            }
+            if (str_starts_with($candidate, $baseUrl)) {
+                continue;
+            }
+            return $candidate;
+        }
+    }
+
+    return '';
+}

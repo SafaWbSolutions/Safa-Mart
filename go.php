@@ -4,6 +4,7 @@ security_headers();
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
+header('Vary: User-Agent');
 header('X-Robots-Tag: noindex, nofollow');
 header('Referrer-Policy: no-referrer');
 
@@ -37,6 +38,18 @@ if (!$clickResult['ok']) {
         'status' => $clickResult['status'],
         'error'  => $clickResult['error'],
     ]);
+}
+
+$platform = trim((string) ($product['source_platform'] ?? ''));
+if ($platform === '') {
+    $platform = detect_platform($affiliateUrl);
+}
+
+// Android phones: try the merchant app first, fall back to the affiliate link
+// (website) when the app is missing. Everything else keeps the plain 302.
+if (merchant_app_package($platform) !== '' && is_android_mobile_request()) {
+    render_merchant_app_bridge($product, $affiliateUrl, $platform);
+    exit;
 }
 
 header('Location: ' . $affiliateUrl, true, 302);
